@@ -1,12 +1,12 @@
-import numpy as np
-from PIL import Image
-import pydicom
-from scipy.ndimage import gaussian_filter
 import cv2
+import numpy as np
+import pydicom
+from PIL import Image
+from scipy.ndimage import gaussian_filter
 
 from rtnls_fundusprep.colors import (
-    rgb_to_luminance,
     contrast_enhance,
+    rgb_to_luminance,
     to_uint8,
     vessel_enhance,
 )
