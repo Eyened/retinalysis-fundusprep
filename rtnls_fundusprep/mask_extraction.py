@@ -1,14 +1,14 @@
 import numpy as np
-from scipy.ndimage import sobel
-from scipy.linalg import lstsq
 from rtnls_registration.transformation import get_affine_transform
-from skimage.morphology import binary_erosion, binary_dilation
-from scipy.ndimage import label
+from scipy.linalg import lstsq
+from scipy.ndimage import label, sobel
+from skimage.morphology import binary_dilation, binary_erosion
 
 
 class Bounds:
-
-    def __init__(self, h, w, cy, cx, radius, min_x, min_y, max_x, max_y):
+    def __init__(
+        self, h, w, cy, cx, radius, min_x, min_y, max_x, max_y, *args, **kwargs
+    ):
         self.h = h
         self.w = w
         self.cy = cy
@@ -94,7 +94,6 @@ class Bounds:
         return result
 
     def get_cropping_matrix(self, target_diameter, patch_size=None):
-
         if patch_size is None:
             patch_size = target_diameter, target_diameter
 
@@ -186,7 +185,6 @@ def ransac_circle_fit(
     best_inliers = None
 
     for _ in range(num_iterations):
-
         while True:
             random_indices = np.random.choice(len(pts), n_points, replace=False)
             sampled_points = pts[random_indices]
@@ -257,7 +255,6 @@ def find_image_edge(im, dy, dx, r, min_r, max_r, include_prior=True):
 
 
 def find_edges(max_edge, cx, cy, min_val):
-
     left = np.argmax(max_edge[:, :cx], axis=1)
     left_mask = np.max(max_edge[:, :cx], axis=1) > min_val
 
@@ -276,7 +273,6 @@ def find_edges(max_edge, cx, cy, min_val):
 
 
 def extract_bounds(image, include_prior=True, min_val=0.1):
-
     if len(image.shape) == 3:
         im = image[:, :, 0]  # red channel
     elif len(image.shape) == 2:
