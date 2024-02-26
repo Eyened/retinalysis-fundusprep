@@ -6,7 +6,9 @@ from skimage.morphology import binary_dilation, binary_erosion
 
 
 class Bounds:
-    def __init__(self, h, w, cy, cx, radius, min_x, min_y, max_x, max_y):
+    def __init__(
+        self, h, w, cy, cx, radius, min_x, min_y, max_x, max_y, *args, **kwargs
+    ):
         self.h = h
         self.w = w
         self.cy = cy
