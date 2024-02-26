@@ -1,3 +1,5 @@
+import numpy as np
+
 from rtnls_fundusprep.colors import contrast_enhance
 from rtnls_fundusprep.mask_extraction import extract_bounds
 
@@ -14,7 +16,10 @@ class FundusPreprocessor:
         self.target_prep_fn = target_prep_fn
 
     def __call__(self, im, tg=None):
-        bounds = extract_bounds(im / 255)
+        if im.dtype == np.uint8:
+            im = im / 255
+
+        bounds = extract_bounds(im)
 
         if self.contrast_enhance:
             mask = bounds.make_binary_mask(0.01 * bounds.radius)
@@ -34,5 +39,11 @@ class FundusPreprocessor:
             ce = M.warp(ce, (diameter, diameter))
             if tg is not None:
                 tg = M.warp(tg, (diameter, diameter))
+
+        if im is not None:
+            im = (255 * im).astype(np.uint8)
+
+        if ce is not None:
+            ce = (255 * ce).astype(np.uint8)
 
         return (im, ce), tg, bounds
