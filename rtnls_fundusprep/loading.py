@@ -1,9 +1,10 @@
+from pathlib import Path
+
+
 import cv2
 import numpy as np
 import pydicom
 from PIL import Image
-from scipy.ndimage import gaussian_filter
-
 from rtnls_fundusprep.colors import (
     contrast_enhance,
     rgb_to_luminance,
@@ -11,9 +12,10 @@ from rtnls_fundusprep.colors import (
     vessel_enhance,
 )
 from rtnls_fundusprep.mask_extraction import extract_bounds
+from scipy.ndimage import gaussian_filter
 
 
-def load_image(path, normalize=True):
+def load_image(path: str | Path, normalize=True):
     """
 
     Args:
