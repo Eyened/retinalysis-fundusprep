@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Union
 
 import cv2
 import numpy as np
@@ -32,7 +33,7 @@ def load_image(path: Union[str, Path], normalize=True):
         array = ds.pixel_array
 
     if normalize:
-        return array / 255
+        return array.astype(np.float32) / 255
     else:
         return array
 
