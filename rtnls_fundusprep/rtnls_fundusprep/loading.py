@@ -26,14 +26,18 @@ def load_image(path: Union[str, Path], normalize=True):
     Returns:
         np.array: 2D or 3D numpy array
     """
-    if path.endswith(".png"):
+    if isinstance(path, str):
+        path = Path(path)
+    if path.suffix in [".jpg", ".png"]:
         array = np.array(Image.open(path))
-    else:
+    elif path.suffix == ".dcm":
         ds = pydicom.read_file(path)
         array = ds.pixel_array
+    else:
+        raise ValueError(f"Unsupported file format: {path.suffix}")
 
     if normalize:
-        return array / 255
+        return array.astype(np.float32) / 255
     else:
         return array
 

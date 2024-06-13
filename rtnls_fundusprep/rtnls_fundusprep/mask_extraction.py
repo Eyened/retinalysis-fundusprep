@@ -120,17 +120,15 @@ class Bounds:
 
     def to_dict(self):
         return {
-            "disk": {
-                "center": {"x": self.cx, "y": self.cy},
-                "radius": self.radius,
-            },
-            "rectangle": {
-                "min_x": self.min_x,
-                "min_y": self.min_y,
-                "max_x": self.max_x,
-                "max_y": self.max_y,
-            },
-            "size": {"h": self.h, "w": self.w},
+            "h": self.h,
+            "w": self.w,
+            "cy": self.cy,
+            "cx": self.cx,
+            "radius": self.radius,
+            "min_x": self.min_x,
+            "min_y": self.min_y,
+            "max_x": self.max_x,
+            "max_y": self.max_y,
         }
 
     @staticmethod
