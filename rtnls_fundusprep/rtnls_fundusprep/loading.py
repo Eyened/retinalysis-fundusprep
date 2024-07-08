@@ -28,7 +28,7 @@ def load_image(path: Union[str, Path], normalize=True):
     """
     if isinstance(path, str):
         path = Path(path)
-    if path.suffix in [".jpg", ".png"]:
+    if path.suffix.lower() in [".jpg", ".png", ".tif", ".tiff"]:
         array = np.array(Image.open(path))
     elif path.suffix == ".dcm":
         ds = pydicom.read_file(path)
