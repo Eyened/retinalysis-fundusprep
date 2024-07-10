@@ -58,3 +58,11 @@ class FundusPreprocessor:
             item["ce"] = ce
 
         return item
+
+
+class FundusItemPreprocessor(FundusPreprocessor):
+    def __call__(self, item):
+        prep_data = super().__call__(item["images"], item.get("masks", None))
+        bounds = prep_data["bounds"]
+        del prep_data["bounds"]
+        return {**item, **prep_data}, bounds.to_dict()
