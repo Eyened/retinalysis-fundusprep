@@ -270,7 +270,7 @@ def find_edges(max_edge, cx, cy, min_val):
     return edge_points, edge_masks
 
 
-def extract_bounds(image, include_prior=True, min_val=0.1):
+def extract_bounds(image, include_prior=True, min_val=0.1) -> Bounds:
     if len(image.shape) == 3:
         im = image[:, :, 0]  # red channel
     elif len(image.shape) == 2:
