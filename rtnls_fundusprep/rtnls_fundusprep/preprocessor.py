@@ -1,3 +1,4 @@
+import cv2
 import numpy as np
 
 from rtnls_fundusprep.colors import contrast_enhance
@@ -10,10 +11,12 @@ class FundusPreprocessor:
         square_size=None,
         contrast_enhance=False,
         target_prep_fn=None,
+        dilation_iterations=0,
     ):
         self.square_size = square_size
         self.contrast_enhance = contrast_enhance
         self.target_prep_fn = target_prep_fn
+        self.dilation_iterations = dilation_iterations
 
     def __call__(self, image, mask=None, **kwargs):
         assert image.dtype == np.float32
@@ -31,6 +34,11 @@ class FundusPreprocessor:
             image = M.warp(image, (diameter, diameter))
 
             if mask is not None:
+                # we dilate the mask to better preserve connectivity
+                if self.dilation_iterations > 0:
+                    mask = cv2.dilate(
+                        mask, np.ones((3, 3)), iterations=self.dilation_iterations
+                    )
                 mask = M.warp(mask, (diameter, diameter))
         else:
             bounds = orig_bounds
@@ -50,3 +58,11 @@ class FundusPreprocessor:
             item["ce"] = ce
 
         return item
+
+
+class FundusItemPreprocessor(FundusPreprocessor):
+    def __call__(self, item):
+        prep_data = super().__call__(item["images"], item.get("masks", None))
+        bounds = prep_data["bounds"]
+        del prep_data["bounds"]
+        return {**item, **prep_data}, bounds.to_dict()
