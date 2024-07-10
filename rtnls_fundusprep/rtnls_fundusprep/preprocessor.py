@@ -18,7 +18,7 @@ class FundusPreprocessor:
         self.target_prep_fn = target_prep_fn
         self.dilation_iterations = dilation_iterations
 
-    def __call__(self, image, mask=None, **kwargs):
+    def __call__(self, image, mask=None, keypoints=None, **kwargs):
         assert image.dtype == np.float32
 
         orig_bounds = extract_bounds(image)
@@ -40,6 +40,8 @@ class FundusPreprocessor:
                         mask, np.ones((3, 3)), iterations=self.dilation_iterations
                     )
                 mask = M.warp(mask, (diameter, diameter))
+            if keypoints is not None:
+                keypoints = M.apply(keypoints, (diameter, diameter))
         else:
             bounds = orig_bounds
 
@@ -54,6 +56,8 @@ class FundusPreprocessor:
         item = {"image": image, "bounds": orig_bounds, **kwargs}
         if mask is not None:
             item["mask"] = mask
+        if keypoints is not None:
+            item["keypoints"] = keypoints
         if ce is not None:
             item["ce"] = ce
 
@@ -62,7 +66,7 @@ class FundusPreprocessor:
 
 class FundusItemPreprocessor(FundusPreprocessor):
     def __call__(self, item):
-        prep_data = super().__call__(item["images"], item.get("masks", None))
+        prep_data = super().__call__(**item)
         bounds = prep_data["bounds"]
         del prep_data["bounds"]
         return {**item, **prep_data}, bounds.to_dict()
