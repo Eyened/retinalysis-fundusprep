@@ -1,8 +1,9 @@
 import numpy as np
-from rtnls_registration.transformation import get_affine_transform
 from scipy.linalg import lstsq
 from scipy.ndimage import label, sobel
 from skimage.morphology import binary_dilation, binary_erosion
+
+from rtnls_fundusprep.transformation import get_affine_transform
 
 
 class Bounds:
