@@ -7,6 +7,13 @@ class ProjectiveTransform:
         self.M = M
         self.M_inv = np.linalg.inv(M)
 
+    @property
+    def scale(self):
+        # self.M is a 3x3 matrix
+        # return the scaling factor as a single scalar
+        return np.sqrt(np.linalg.det(self.M[:2, :2]))
+        
+
     def apply(self, points):
         # Add homogeneous coordinate (1) to each point
         points_homogeneous = np.column_stack([points, np.ones(len(points))])
@@ -65,7 +72,7 @@ class ProjectiveTransform:
         return html_table
 
 
-def get_affine_transform(out_size, rotate, scale, center, flip):
+def get_affine_transform(out_size, rotate, scale, center, flip=(False, False)):
     """
     Parameters:
     out_size: size of the extracted patch (h, w)
