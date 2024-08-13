@@ -12,7 +12,6 @@ class ProjectiveTransform:
         # self.M is a 3x3 matrix
         # return the scaling factor as a single scalar
         return np.sqrt(np.linalg.det(self.M[:2, :2]))
-        
 
     def apply(self, points):
         # Add homogeneous coordinate (1) to each point
@@ -37,27 +36,30 @@ class ProjectiveTransform:
             h, w = out_size
             return w, h
 
-    def warp(self, image, out_size=None):
+    def _apply_warp(self, image, out_size, M, mode):
         dsize = self.get_dsize(image, out_size)
-
-        if image.dtype == bool or image.dtype == np.uint8:
-            warped = cv2.warpPerspective(
-                image, self.M, dsize=dsize, flags=cv2.INTER_NEAREST
-            )
+        image_in = image
+        if image.dtype == bool:
+            image_in = image.astype(np.uint8)
         else:
-            warped = cv2.warpPerspective(image, self.M, dsize=dsize)
-        return warped
+            image_in = image
+        if mode == "nearest":
+            flags = cv2.INTER_NEAREST
+        elif mode == "bilinear":
+            flags = cv2.INTER_LINEAR
+        elif mode == "bicubic":
+            flags = cv2.INTER_CUBIC
 
-    def warp_inverse(self, image, out_size=None):
-        dsize = self.get_dsize(image, out_size)
+        result = cv2.warpPerspective(image_in, M, dsize=dsize, flags=flags)
+        if image.dtype == bool:
+            result = result.astype(bool)
+        return result
 
-        if image.dtype == bool or image.dtype == np.uint8:
-            warped = cv2.warpPerspective(
-                image, self.M_inv, dsize=dsize, flags=cv2.INTER_NEAREST
-            )
-        else:
-            warped = cv2.warpPerspective(image, self.M_inv, dsize=dsize)
-        return warped
+    def warp(self, image, out_size=None, mode="bilinear"):
+        return self._apply_warp(image, out_size, self.M, mode)
+
+    def warp_inverse(self, image, out_size=None, mode="bilinear"):
+        return self._apply_warp(image, out_size, self.M_inv, mode)
 
     def _repr_html_(self):
         html_table = "<h4>Projective Transform:</h4><table>"
