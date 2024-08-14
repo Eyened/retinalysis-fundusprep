@@ -1,5 +1,13 @@
 import cv2
 import numpy as np
+from enum import Enum
+
+
+class Interpolation(Enum):
+    NEAREST = cv2.INTER_NEAREST
+    BILINEAR = cv2.INTER_LINEAR
+    BICUBIC = cv2.INTER_CUBIC
+
 
 def get_param_xy(param):
     if hasattr(param, '__iter__') and len(param) == 2:
@@ -7,8 +15,9 @@ def get_param_xy(param):
     else:
         return param, param
 
+
 class ProjectiveTransform:
-    
+
     def __init__(self, M, in_size, out_size):
         self.in_size = get_param_xy(in_size)
         self.out_size = get_param_xy(out_size)
@@ -46,45 +55,42 @@ class ProjectiveTransform:
 
     def _apply_warp(self, image, out_size, M, mode):
         dsize = self.get_dsize(image, out_size)
-        image_in = image
-        if image.dtype == bool:
-            image_in = image.astype(np.uint8)
-        else:
-            image_in = image
-        if mode == "nearest":
-            flags = cv2.INTER_NEAREST
-        elif mode == "bilinear":
-            flags = cv2.INTER_LINEAR
-        elif mode == "bicubic":
-            flags = cv2.INTER_CUBIC
+        image_in = image.astype(np.uint8) if image.dtype == bool else image
+        result = cv2.warpPerspective(
+            image_in, M, dsize=dsize, flags=mode.value)
+        return result.astype(bool) if image.dtype == bool else result
 
-        result = cv2.warpPerspective(image_in, M, dsize=dsize, flags=flags)
-        if image.dtype == bool:
-            result = result.astype(bool)
-        return result
+    def warp(self, image, out_size=None, mode=Interpolation.BILINEAR):
+        return self._apply_warp(image, out_size or self.out_size, self.M, mode)
 
-    def warp(self, image, out_size=None, mode="bilinear"):
-        if out_size is None:
-            out_size = self.out_size
-        return self._apply_warp(image, out_size, self.M, mode)
-
-    def warp_inverse(self, image, out_size=None, mode="bilinear"):
-        if out_size is None:
-            out_size = self.in_size
-        return self._apply_warp(image, out_size, self.M_inv, mode)
+    def warp_inverse(self, image, out_size=None, mode=Interpolation.BILINEAR):
+        return self._apply_warp(image, out_size or self.in_size, self.M_inv, mode)
 
     def _repr_html_(self):
-        html_table = "<h4>Projective Transform:</h4><table>"
-
+        html = "<h4>Projective Transform:</h4>"
+        html += f"<p>Input size: {self.in_size}</p>"
+        html += f"<p>Output size: {self.out_size}</p>"
+        html += "<p>Matrix:</p>"
+        html += "<table>"
         for row in self.M:
-            html_table += "<tr>"
+            html += "<tr>"
             for val in row:
-                html_table += f"<td>{val:.3f}</td>"
-            html_table += "</tr>"
+                html += f"<td>{val:.3f}</td>"
+            html += "</tr>"
 
-        html_table += "</table>"
-        return html_table
+        html += "</table>"
+        return html
 
+    def to_dict(self):
+        return {
+            "M": self.M.tolist(),
+            "in_size": self.in_size,
+            "out_size": self.out_size,
+        }
+
+    @classmethod
+    def from_dict(cls, d):
+        return ProjectiveTransform(np.array(d["M"]), d["in_size"], d["out_size"])
 
 
 def get_affine_transform(in_size, out_size, rotate=0, scale=1, center=None, flip=(False, False)):
