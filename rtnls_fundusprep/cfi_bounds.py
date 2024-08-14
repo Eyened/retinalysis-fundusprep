@@ -2,7 +2,6 @@ from functools import cached_property, lru_cache
 import numpy as np
 from matplotlib import pyplot as plt
 from scipy.ndimage import gaussian_filter
-
 from rtnls_fundusprep.transformation import get_affine_transform
 from rtnls_fundusprep.utils import to_uint8
 
@@ -192,7 +191,7 @@ class CFIBounds:
 
     def _repr_markdown_(self):
         result = f"""
-        #### Bounds:
+        #### CFIBounds:
 
         - Center: ({self.cx}, {self.cy})
         - Radius: {self.radius}
@@ -223,8 +222,9 @@ class CFIBounds:
             'lines': self.lines
         }
 
-    def from_dict(d):
-        return CFIBounds(None, d['center'][0], d['center'][1], d['radius'], d['lines'])
+    @classmethod
+    def from_dict(cls, image, d):
+        return CFIBounds(image, d['center'][0], d['center'][1], d['radius'], d['lines'])
 
 
 def line_circle_intersection(P0, P1, C, r):
