@@ -26,14 +26,14 @@ def rescale(image, resolution=1024):
     """
     Rescale image to resolution x resolution
     """
-    h, w = image.shape
+    h, w = image.shape[:2]
+    in_size = h, w
     s = min(resolution / h, resolution / w)
-    out_size = resolution, resolution
     rotate = 0
     scale = s, s
     center = h // 2, w // 2
-    init_transform = get_affine_transform(out_size, rotate, scale, center)
-    im_scaled = init_transform.warp(image, out_size)
+    init_transform = get_affine_transform(in_size, resolution, rotate, scale, center)
+    im_scaled = init_transform.warp(image)
     return init_transform, im_scaled
 
 
