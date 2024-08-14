@@ -84,7 +84,6 @@ class CFIBounds:
         blurred = T.warp_inverse(blurred_warped, (self.h, self.w))
         ce = unsharp_masking(self.image / 255, blurred,
                              contrast_factor, sharpen)
-        ce[~self.mask] = 0
         return to_uint8(ce)
 
     def make_binary_mask(self, shrink_ratio=0.01):
@@ -166,7 +165,6 @@ class CFIBounds:
         image = self.mirrored_image / 255
         blurred = gaussian_filter(image, sigma=(sigma, sigma, 0))
         ce = unsharp_masking(image, blurred, contrast_factor)
-        ce[~self.mask] = 0
         return to_uint8(ce)
 
     def get_cropping_transform(self, target_diameter, patch_size=None):
@@ -219,7 +217,7 @@ class CFIBounds:
         return {
             'center': (self.cx, self.cy),
             'radius': self.radius,
-            'lines': {k: (v.tolist() if isinstance(v, np.ndarray) else v) for k, v in self.lines.items()}
+            'lines': {k: (v.tolist() if isinstance(v, np.ndarray) else list(v)) for k, v in self.lines.items()},
         }
 
     @classmethod
