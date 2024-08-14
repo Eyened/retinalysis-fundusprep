@@ -28,8 +28,8 @@ class ProjectiveTransform:
     def scale(self):
         # self.M is a 3x3 matrix
         # return the scaling factor as a single scalar
-        return np.sqrt(np.linalg.det(self.M[:2, :2]))
-
+        return np.sqrt(np.abs(np.linalg.det(self.M[:2, :2])))
+    
     def apply(self, points):
         # Add homogeneous coordinate (1) to each point
         points_homogeneous = np.column_stack([points, np.ones(len(points))])
@@ -51,7 +51,7 @@ class ProjectiveTransform:
             return np.ceil(self.apply(corners).max(axis=0)).astype(int)
         else:
             h, w = out_size
-            return w, h
+            return int(np.ceil(w)), int(np.ceil(h))
 
     def _apply_warp(self, image, out_size, M, mode):
         dsize = self.get_dsize(image, out_size)
