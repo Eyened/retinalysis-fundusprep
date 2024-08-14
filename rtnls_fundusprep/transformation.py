@@ -1,9 +1,17 @@
 import cv2
 import numpy as np
 
+def get_param_xy(param):
+    if hasattr(param, '__iter__') and len(param) == 2:
+        return param
+    else:
+        return param, param
 
 class ProjectiveTransform:
-    def __init__(self, M):
+    
+    def __init__(self, M, in_size, out_size):
+        self.in_size = get_param_xy(in_size)
+        self.out_size = get_param_xy(out_size)
         self.M = M
         self.M_inv = np.linalg.inv(M)
 
@@ -56,9 +64,13 @@ class ProjectiveTransform:
         return result
 
     def warp(self, image, out_size=None, mode="bilinear"):
+        if out_size is None:
+            out_size = self.out_size
         return self._apply_warp(image, out_size, self.M, mode)
 
     def warp_inverse(self, image, out_size=None, mode="bilinear"):
+        if out_size is None:
+            out_size = self.in_size
         return self._apply_warp(image, out_size, self.M_inv, mode)
 
     def _repr_html_(self):
@@ -74,17 +86,23 @@ class ProjectiveTransform:
         return html_table
 
 
-def get_affine_transform(out_size, rotate, scale, center, flip=(False, False)):
+
+def get_affine_transform(in_size, out_size, rotate=0, scale=1, center=None, flip=(False, False)):
     """
     Parameters:
+    in_size: size of the input image (h, w)
     out_size: size of the extracted patch (h, w)
     rotate: angle in degrees
-    scale: scaling factor (sy, sx)
+    scale: scaling factor s or (sy, sx)
     center: center of the patch (cy, cx)
     flip: apply horizontal/vertical flipping
     """
     # center to top left corner
-    cy, cx = center
+    if center is None:
+        h, w = get_param_xy(in_size)
+        cy, cx = h / 2, w / 2
+    else:
+        cy, cx = center
     C1 = np.array([[1, 0, -cx], [0, 1, -cy], [0, 0, 1]], dtype=float)
 
     # rotate
@@ -95,11 +113,11 @@ def get_affine_transform(out_size, rotate, scale, center, flip=(False, False)):
     )
 
     # scale
-    sy, sx = scale
+    sy, sx = get_param_xy(scale)
     S = np.array([[sx, 0, 0], [0, sy, 0], [0, 0, 1]], dtype=float)
 
     # top left corner to center
-    h, w = out_size
+    h, w = get_param_xy(out_size)
     ty = h / 2
     tx = w / 2
     C2 = np.array([[1, 0, tx], [0, 1, ty], [0, 0, 1]], dtype=float)
@@ -112,4 +130,4 @@ def get_affine_transform(out_size, rotate, scale, center, flip=(False, False)):
     if flip_vertical:
         M = np.array([[1, 0, 0], [0, -1, h], [0, 0, 1]]) @ M
 
-    return ProjectiveTransform(M)
+    return ProjectiveTransform(M, in_size, out_size)

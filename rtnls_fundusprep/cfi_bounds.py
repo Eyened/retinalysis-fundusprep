@@ -77,7 +77,7 @@ class CFIBounds:
     def make_contrast_enhanced_res256(self, sigma_fraction, contrast_factor=4, sharpen=False):
         ce_resolution = 256
         T = self.get_cropping_transform(ce_resolution)
-        bounds_warped = self.warp(T, (ce_resolution, ce_resolution))
+        bounds_warped = self.warp(T)
         image_warped = bounds_warped.mirrored_image / 255
         sigma_warped = sigma_fraction * bounds_warped.radius
         blurred_warped = gaussian_filter(
@@ -132,7 +132,7 @@ class CFIBounds:
         min_x = self.min_x + d
         max_x = self.max_x - d
         # below min_y mirrored to above min_y
-        mirrored_image[:min_y] = mirrored_image[2 * min_y    - 1: min_y - 1: -1]
+        mirrored_image[:min_y] = mirrored_image[2 * min_y - 1: min_y - 1: -1]
         # above max_y mirrored to below max_y
         mirrored_image[max_y:] = mirrored_image[max_y: 2 * max_y - h: -1]
 
@@ -172,25 +172,23 @@ class CFIBounds:
 
     def get_cropping_transform(self, target_diameter, patch_size=None):
         if patch_size is None:
-            patch_size = target_diameter, target_diameter
+            patch_size = target_diameter
 
-        s = target_diameter / (2 * self.radius)
-        rotate = 0
-        scale = s, s
+        scale = target_diameter / (2 * self.radius)
+        in_size = self.h, self.w
         center = self.cy, self.cx
-        return get_affine_transform(patch_size, rotate, scale, center)
+        return get_affine_transform(in_size, patch_size, scale=scale, center=center)
 
-    def warp(self, transform, out_size):
+    def warp(self, transform):
         cx_warped, cy_warped = transform.apply([[self.cx, self.cy]])[0]
         radius_warped = self.radius * transform.scale
-        image_warped = transform.warp(self.image, out_size)
+        image_warped = transform.warp(self.image)
         lines_warped = {k: transform.apply(v) for k, v in self.lines.items()}
         return CFIBounds(image_warped, cx_warped, cy_warped, radius_warped, lines_warped)
 
     def crop(self, target_diameter):
         T = self.get_cropping_transform(target_diameter)
-        out_size = target_diameter, target_diameter
-        return T, self.warp(T, out_size)
+        return T, self.warp(T)
 
     def _repr_markdown_(self):
         result = f"""
