@@ -1,11 +1,34 @@
 import cv2
 import numpy as np
+from enum import Enum
+
+
+class Interpolation(Enum):
+    NEAREST = cv2.INTER_NEAREST
+    BILINEAR = cv2.INTER_LINEAR
+    BICUBIC = cv2.INTER_CUBIC
+
+
+def get_param_xy(param):
+    if hasattr(param, '__iter__') and len(param) == 2:
+        return param
+    else:
+        return param, param
 
 
 class ProjectiveTransform:
-    def __init__(self, M):
+
+    def __init__(self, M, in_size, out_size):
+        self.in_size = get_param_xy(in_size)
+        self.out_size = get_param_xy(out_size)
         self.M = M
         self.M_inv = np.linalg.inv(M)
+
+    @property
+    def scale(self):
+        # self.M is a 3x3 matrix
+        # return the scaling factor as a single scalar
+        return np.sqrt(np.linalg.det(self.M[:2, :2]))
 
     def apply(self, points):
         # Add homogeneous coordinate (1) to each point
@@ -30,52 +53,62 @@ class ProjectiveTransform:
             h, w = out_size
             return w, h
 
-    def warp(self, image, out_size=None):
+    def _apply_warp(self, image, out_size, M, mode):
         dsize = self.get_dsize(image, out_size)
+        image_in = image.astype(np.uint8) if image.dtype == bool else image
+        result = cv2.warpPerspective(
+            image_in, M, dsize=dsize, flags=mode.value)
+        return result.astype(bool) if image.dtype == bool else result
 
-        if image.dtype == bool or image.dtype == np.uint8:
-            warped = cv2.warpPerspective(
-                image, self.M, dsize=dsize, flags=cv2.INTER_NEAREST
-            )
-        else:
-            warped = cv2.warpPerspective(image, self.M, dsize=dsize)
-        return warped
+    def warp(self, image, out_size=None, mode=Interpolation.BILINEAR):
+        return self._apply_warp(image, out_size or self.out_size, self.M, mode)
 
-    def warp_inverse(self, image, out_size=None):
-        dsize = self.get_dsize(image, out_size)
-
-        if image.dtype == bool or image.dtype == np.uint8:
-            warped = cv2.warpPerspective(
-                image, self.M_inv, dsize=dsize, flags=cv2.INTER_NEAREST
-            )
-        else:
-            warped = cv2.warpPerspective(image, self.M_inv, dsize=dsize)
-        return warped
+    def warp_inverse(self, image, out_size=None, mode=Interpolation.BILINEAR):
+        return self._apply_warp(image, out_size or self.in_size, self.M_inv, mode)
 
     def _repr_html_(self):
-        html_table = "<h4>Projective Transform:</h4><table>"
-
+        html = "<h4>Projective Transform:</h4>"
+        html += f"<p>Input size: {self.in_size}</p>"
+        html += f"<p>Output size: {self.out_size}</p>"
+        html += "<p>Matrix:</p>"
+        html += "<table>"
         for row in self.M:
-            html_table += "<tr>"
+            html += "<tr>"
             for val in row:
-                html_table += f"<td>{val:.3f}</td>"
-            html_table += "</tr>"
+                html += f"<td>{val:.3f}</td>"
+            html += "</tr>"
 
-        html_table += "</table>"
-        return html_table
+        html += "</table>"
+        return html
+
+    def to_dict(self):
+        return {
+            "M": self.M.tolist(),
+            "in_size": self.in_size,
+            "out_size": self.out_size,
+        }
+
+    @classmethod
+    def from_dict(cls, d):
+        return ProjectiveTransform(np.array(d["M"]), d["in_size"], d["out_size"])
 
 
-def get_affine_transform(out_size, rotate, scale, center, flip):
+def get_affine_transform(in_size, out_size, rotate=0, scale=1, center=None, flip=(False, False)):
     """
     Parameters:
+    in_size: size of the input image (h, w)
     out_size: size of the extracted patch (h, w)
     rotate: angle in degrees
-    scale: scaling factor (sy, sx)
+    scale: scaling factor s or (sy, sx)
     center: center of the patch (cy, cx)
     flip: apply horizontal/vertical flipping
     """
     # center to top left corner
-    cy, cx = center
+    if center is None:
+        h, w = get_param_xy(in_size)
+        cy, cx = h / 2, w / 2
+    else:
+        cy, cx = center
     C1 = np.array([[1, 0, -cx], [0, 1, -cy], [0, 0, 1]], dtype=float)
 
     # rotate
@@ -86,11 +119,11 @@ def get_affine_transform(out_size, rotate, scale, center, flip):
     )
 
     # scale
-    sy, sx = scale
+    sy, sx = get_param_xy(scale)
     S = np.array([[sx, 0, 0], [0, sy, 0], [0, 0, 1]], dtype=float)
 
     # top left corner to center
-    h, w = out_size
+    h, w = get_param_xy(out_size)
     ty = h / 2
     tx = w / 2
     C2 = np.array([[1, 0, tx], [0, 1, ty], [0, 0, 1]], dtype=float)
@@ -103,4 +136,4 @@ def get_affine_transform(out_size, rotate, scale, center, flip):
     if flip_vertical:
         M = np.array([[1, 0, 0], [0, -1, h], [0, 0, 1]]) @ M
 
-    return ProjectiveTransform(M)
+    return ProjectiveTransform(M, in_size, out_size)

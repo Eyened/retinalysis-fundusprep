@@ -1,9 +1,7 @@
 import cv2
 import numpy as np
 
-from rtnls_fundusprep.colors import contrast_enhance
-from rtnls_fundusprep.mask_extraction import extract_bounds
-
+from rtnls_fundusprep.mask_extraction import get_cfi_bounds
 
 class FundusPreprocessor:
     def __init__(
@@ -21,7 +19,7 @@ class FundusPreprocessor:
     def __call__(self, image, mask=None, keypoint=None, **kwargs):
         assert image.dtype == np.float32
 
-        orig_bounds = extract_bounds(image)
+        orig_bounds = get_cfi_bounds(image)
 
         if self.target_prep_fn is not None:
             mask = self.target_prep_fn(mask)
@@ -29,8 +27,7 @@ class FundusPreprocessor:
 
         if self.square_size is not None:
             diameter = self.square_size
-            M = orig_bounds.get_cropping_matrix(diameter)
-            bounds = orig_bounds.warp(M, (diameter, diameter))
+            M, bounds = orig_bounds.crop(diameter)
             image = M.warp(image, (diameter, diameter))
 
             if mask is not None:
@@ -47,9 +44,7 @@ class FundusPreprocessor:
 
         if self.contrast_enhance:
             mask = bounds.make_binary_mask(0.01 * bounds.radius)
-            mirrored = bounds.background_mirroring(image)
-            sigma = 0.05 * bounds.radius
-            ce = contrast_enhance(mirrored, mask, sigma)
+            ce = bounds.contrast_enhanced
         else:
             ce = None
 
