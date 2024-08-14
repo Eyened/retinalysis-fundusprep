@@ -219,7 +219,7 @@ class CFIBounds:
         return {
             'center': (self.cx, self.cy),
             'radius': self.radius,
-            'lines': self.lines
+            'lines': {k: (v.tolist() if isinstance(v, np.ndarray) else v) for k, v in self.lines.items()}
         }
 
     @classmethod
