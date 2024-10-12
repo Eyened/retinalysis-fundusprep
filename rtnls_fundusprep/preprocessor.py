@@ -1,7 +1,12 @@
+import os
+from typing import List
 import cv2
+from joblib import Parallel, delayed
 import numpy as np
-
+from PIL import Image
 from rtnls_fundusprep.mask_extraction import get_cfi_bounds
+from rtnls_fundusprep.utils import open_image
+from tqdm import tqdm
 
 class FundusPreprocessor:
     def __init__(
@@ -17,7 +22,7 @@ class FundusPreprocessor:
         self.dilation_iterations = dilation_iterations
 
     def __call__(self, image, mask=None, keypoint=None, **kwargs):
-        assert image.dtype == np.float32
+        # assert image.dtype == np.float32
 
         orig_bounds = get_cfi_bounds(image)
 
@@ -43,8 +48,8 @@ class FundusPreprocessor:
             bounds = orig_bounds
 
         if self.contrast_enhance:
-            mask = bounds.make_binary_mask(0.01 * bounds.radius)
-            ce = bounds.contrast_enhanced
+            mask = bounds.mask
+            ce = bounds.contrast_enhanced_5
         else:
             ce = None
 
@@ -65,3 +70,64 @@ class FundusItemPreprocessor(FundusPreprocessor):
         bounds = prep_data["bounds"]
         del prep_data["bounds"]
         return {**item, **prep_data}, bounds.to_dict()
+
+
+def preprocess_one(img_path, rgb_path, ce_path, square_size):
+    preprocessor = FundusPreprocessor(
+        square_size=square_size, contrast_enhance=ce_path is not None
+    )
+
+    try:
+        image = open_image(img_path)
+        prep = preprocessor(image, None)
+    except Exception:
+        print(f"Error with image {img_path}")
+        return False, {}
+
+    if rgb_path is not None:
+        Image.fromarray((prep["image"] * 255).astype(np.uint8)).save(rgb_path)
+    if ce_path is not None:
+        Image.fromarray((prep["ce"] * 255).astype(np.uint8)).save(ce_path)
+    bounds = prep["bounds"].to_dict()
+    
+    return True, bounds
+
+
+def parallel_preprocess(
+    files: List,
+    ids: List = None,
+    square_size=1024,
+    ce_path=None,
+    rgb_path=None,
+    n_jobs=-1,
+):
+    if ids is not None:
+        assert len(files) == len(ids)
+    else:
+        ids = [Path(f).stem for f in files]
+    if ce_path is not None:
+        if not os.path.exists(ce_path):
+            os.makedirs(ce_path)
+
+        ce_paths = [os.path.join(ce_path, str(id) + ".png") for id in ids]
+    else:
+        ce_paths = [None for f in files]
+
+    if rgb_path is not None:
+        if not os.path.exists(rgb_path):
+            os.makedirs(rgb_path)
+
+        rgb_paths = [os.path.join(rgb_path, str(id) + ".png") for id in ids]
+    else:
+        rgb_paths = [None for f in files]
+
+    items = zip(files, rgb_paths, ce_paths)
+
+    meta = Parallel(n_jobs=n_jobs, verbose=10)(
+        delayed(preprocess_one)(*item, square_size=square_size) for item in tqdm(items)
+    )
+
+    return [
+        {"id": id, "success": success, "bounds": bounds}
+        for (success, bounds), id in zip(meta, ids)
+    ]
