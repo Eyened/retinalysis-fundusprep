@@ -11,6 +11,7 @@ setup(
         "numpy == 1.*",
         "pandas == 2.*",
         "scikit-learn==1.*",
+        "scikit-image==0.24.0",
         "opencv-python == 4.*",
         "matplotlib==3.*",
         "joblib==1.*",
