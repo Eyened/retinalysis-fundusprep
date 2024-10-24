@@ -8,7 +8,7 @@ from rtnls_fundusprep.utils import to_uint8
 
 class CFIBounds:
 
-    def __init__(self, image, cx, cy, radius, lines={}):
+    def __init__(self, image, cx, cy, radius, lines={}, **kwargs):
         self.image = image
         h, w = image.shape[:2]
         center = cx, cy
@@ -212,6 +212,19 @@ class CFIBounds:
         plt.xlim(0, self.w)
         plt.ylim(self.h, 0)
         plt.show()
+        
+    def make_bounds_image(self, ax=None, fig=None):
+        import cv2
+        im = self.image.copy()
+
+        cv2.circle(im, (round(self.cx), round(self.cy)), radius=0, color=(255, 255, 255), thickness=-1)
+        cv2.circle(im, (round(self.cx), round(self.cy)), radius=round(self.radius), color=(255, 255, 255), thickness=2)
+        for k in ['top', 'bottom', 'left', 'right']:
+            if k in self.lines:
+                p0, p1 = self.lines[k]
+                cv2.line(im, (round(p0[0]), round(p0[1])), (round(p1[0]), round(p1[1])), (255,255,255), thickness=2)
+
+        return im
 
     def to_dict(self):
         return {
