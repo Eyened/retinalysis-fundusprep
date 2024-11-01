@@ -1,12 +1,16 @@
 import os
+from pathlib import Path
 from typing import List
+
 import cv2
-from joblib import Parallel, delayed
 import numpy as np
+from joblib import Parallel, delayed
 from PIL import Image
+from tqdm import tqdm
+
 from rtnls_fundusprep.mask_extraction import get_cfi_bounds
 from rtnls_fundusprep.utils import open_image
-from tqdm import tqdm
+
 
 class FundusPreprocessor:
     def __init__(
@@ -85,11 +89,11 @@ def preprocess_one(img_path, rgb_path, ce_path, square_size):
         return False, {}
 
     if rgb_path is not None:
-        Image.fromarray((prep["image"] * 255).astype(np.uint8)).save(rgb_path)
+        Image.fromarray((prep["image"]).astype(np.uint8)).save(rgb_path)
     if ce_path is not None:
-        Image.fromarray((prep["ce"] * 255).astype(np.uint8)).save(ce_path)
+        Image.fromarray((prep["ce"]).astype(np.uint8)).save(ce_path)
     bounds = prep["bounds"].to_dict()
-    
+
     return True, bounds
 
 
