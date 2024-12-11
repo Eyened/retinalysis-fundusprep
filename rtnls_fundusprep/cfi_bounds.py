@@ -84,7 +84,12 @@ class CFIBounds:
         blurred = T.warp_inverse(blurred_warped, (self.h, self.w))
         ce = unsharp_masking(self.image / 255, blurred,
                              contrast_factor, sharpen)
-        return to_uint8(ce)
+        
+        mask = self.make_binary_mask(0.01)
+        ce = to_uint8(ce)
+        ce[~mask] = 0
+
+        return ce
 
     def make_binary_mask(self, shrink_ratio=0.01):
         """
