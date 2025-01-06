@@ -1,12 +1,11 @@
-import numpy as np
 import cv2
+import numpy as np
 from scipy.ndimage import sobel
 from sklearn.linear_model import RANSACRegressor
 
-from rtnls_fundusprep.circle_fit import find_circle, circle_fit
 from rtnls_fundusprep.cfi_bounds import CFIBounds
+from rtnls_fundusprep.circle_fit import circle_fit, find_circle
 from rtnls_fundusprep.utils import get_gray_scale, rescale
-
 
 RESOLUTION = 256
 CENTER = RESOLUTION // 2
@@ -20,10 +19,10 @@ r = np.arange(RESOLUTION)
 q = RESOLUTION // 8
 f = 0.3
 rect_masks = {
-    'bottom': (q < r) & (r < 3 * q),
-    'top': (5 * q < r) & (r < 7 * q),
-    'right': (r < (1 - f)*q) | (r > (7 + f) * q),
-    'left':  ((3 + f) * q < r) & (r < (5 - f) * q)
+    "bottom": (q < r) & (r < 3 * q),
+    "top": (5 * q < r) & (r < 7 * q),
+    "right": (r < (1 - f) * q) | (r > (7 + f) * q),
+    "left": ((3 + f) * q < r) & (r < (5 - f) * q),
 }
 corner_mask = np.ones(RESOLUTION, dtype=bool)
 for mask in rect_masks.values():
@@ -31,7 +30,7 @@ for mask in rect_masks.values():
 
 # some constants used for shortest path calculation
 n = RESOLUTION - MIN_R
-COST_DIST = 0.01 * np.subtract.outer(np.arange(n), np.arange(n))**2
+COST_DIST = 0.01 * np.subtract.outer(np.arange(n), np.arange(n)) ** 2
 th = np.arange(RESOLUTION) * 2 * np.pi / RESOLUTION
 COST_TH = np.cos(th)
 SIN_TH = np.sin(th)
@@ -59,8 +58,8 @@ def shortest_path(edge_image_horizontal):
 
     # Backtrack to get the path
     actual_path = [min_index]
-    for i in range(resolution-2, -1, -1):
-        min_index = path[i+1, min_index]
+    for i in range(resolution - 2, -1, -1):
+        min_index = path[i + 1, min_index]
         actual_path.append(min_index)
 
     # Reverse the path to get it from top to bottom
@@ -70,7 +69,8 @@ def shortest_path(edge_image_horizontal):
 def get_edge_points(image):
     # convert to polar coordinates (with max radius MAX_R)
     polar_image = cv2.linearPolar(
-        image, (CENTER, CENTER), MAX_R, cv2.WARP_FILL_OUTLIERS)
+        image, (CENTER, CENTER), MAX_R, cv2.WARP_FILL_OUTLIERS
+    )
     # crop (assuming radius > MIN_R)
     edge_region = polar_image[:, MIN_R:]
 
@@ -109,13 +109,13 @@ def find_line(pts_x, pts_y):
 
 def find_lines(xs, ys):
     result = {}
-    for location in ['left', 'right']:
+    for location in ["left", "right"]:
         mask = rect_masks[location]
         line, support = find_line(ys[mask], xs[mask])
         if support > 0.5:
             p0, p1 = line
             result[location] = p0[::-1], p1[::-1]
-    for location in ['top', 'bottom']:
+    for location in ["top", "bottom"]:
         mask = rect_masks[location]
         line, support = find_line(xs[mask], ys[mask])
         if support > 0.5:
@@ -125,17 +125,16 @@ def find_lines(xs, ys):
 
 def inverse_tranform(bounds, init_transform):
     result = {}
-    result['center'] = init_transform.apply_inverse([bounds['center']])[0]
-    result['radius'] = bounds['radius'] / init_transform.M[0, 0]
+    result["center"] = init_transform.apply_inverse([bounds["center"]])[0]
+    result["radius"] = bounds["radius"] / init_transform.M[0, 0]
 
-    for position in ('top', 'bottom', 'left', 'right'):
+    for position in ("top", "bottom", "left", "right"):
         if position in bounds:
             result[position] = init_transform.apply_inverse(bounds[position])
     return result
 
 
 def get_mask(image):
-
     image_gray = get_gray_scale(image)
     T0, image_scaled = rescale(image_gray, resolution=RESOLUTION)
 
@@ -143,7 +142,8 @@ def get_mask(image):
 
     try:
         radius, center, inliers = find_circle(
-            xs, ys, MIN_R, MAX_R, inlier_dist_threshold=INLIER_DIST_THRESHOLD)
+            xs, ys, MIN_R, MAX_R, inlier_dist_threshold=INLIER_DIST_THRESHOLD
+        )
         circle_fraction = np.sum(inliers) / RESOLUTION
     except ValueError:
         circle_fraction = 0
@@ -163,16 +163,13 @@ def get_mask(image):
         # find rectangular bounds
         result = find_lines(xs, ys)
 
-    result['center'] = center
-    result['radius'] = radius
+    result["center"] = center
+    result["radius"] = radius
 
     return inverse_tranform(result, T0)
 
 
 def get_cfi_bounds(image):
     mask = get_mask(image)
-    cx, cy = mask['center']
-    radius = mask['radius']
-    lines = {k: mask[k] for k in [
-        'top', 'bottom', 'left', 'right'] if k in mask}
-    return CFIBounds(image, cx, cy, radius, lines)
+    lines = {k: mask[k] for k in ["top", "bottom", "left", "right"] if k in mask}
+    return CFIBounds(mask["center"], mask["radius"], lines, image=image)

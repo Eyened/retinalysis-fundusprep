@@ -1,27 +1,43 @@
 from functools import cached_property, lru_cache
+from typing import Tuple
+
 import numpy as np
 from matplotlib import pyplot as plt
 from scipy.ndimage import gaussian_filter
-from rtnls_fundusprep.transformation import get_affine_transform
+
+from rtnls_fundusprep.transformation import ProjectiveTransform, get_affine_transform
 from rtnls_fundusprep.utils import to_uint8
 
 
 class CFIBounds:
-
-    def __init__(self, image, cx, cy, radius, lines={}, **kwargs):
-        self.image = image
-        h, w = image.shape[:2]
-        center = cx, cy
-        self.h = h
-        self.w = w
-        self.cy = cy
-        self.cx = cx
+    def __init__(
+        self,
+        center: Tuple[float],
+        radius: float,
+        lines={},
+        hw: Tuple[float] = None,
+        image: np.array = None,
+        **kwargs,
+    ):
+        center = center
+        self.cy = center[1]
+        self.cx = center[0]
         self.radius = radius
         self.lines = lines
+
+        assert (
+            image is not None or hw is not None
+        ), "Either hw or image must be provided"
+
+        self.hw = hw
+        self.image = image
+        if image is not None:
+            self.hw = image.shape[:2]
+
         self.min_y = 0
-        self.max_y = h
+        self.max_y = self.hw[0]
         self.min_x = 0
-        self.max_x = w
+        self.max_x = self.hw[1]
 
         def intersects(location):
             if location not in lines:
@@ -31,20 +47,20 @@ class CFIBounds:
             if len(intersects) == 2:
                 return intersects
 
-        line_bottom = intersects('bottom')
+        line_bottom = intersects("bottom")
         if line_bottom:
             ((_, y0), (_, y1)) = line_bottom
             self.max_y = min(self.max_y, int(np.floor(min(y0, y1))))
-        line_top = intersects('top')
+        line_top = intersects("top")
         if line_top:
             ((_, y0), (_, y1)) = line_top
             self.min_y = max(self.min_y, int(np.ceil(max(y0, y1))))
 
-        line_left = intersects('left')
+        line_left = intersects("left")
         if line_left:
             ((x0, _), (x1, _)) = line_left
             self.min_x = max(self.min_x, int(np.ceil(max(x0, x1))))
-        line_right = intersects('right')
+        line_right = intersects("right")
         if line_right:
             ((x0, _), (x1, _)) = line_right
             self.max_x = min(self.max_x, int(np.floor(min(x0, x1))))
@@ -73,18 +89,18 @@ class CFIBounds:
     def mirrored_image(self):
         return self.make_mirrored_image()
 
-    def make_contrast_enhanced_res256(self, sigma_fraction, contrast_factor=4, sharpen=False):
+    def make_contrast_enhanced_res256(
+        self, sigma_fraction, contrast_factor=4, sharpen=False
+    ):
         ce_resolution = 256
         T = self.get_cropping_transform(ce_resolution)
         bounds_warped = self.warp(T)
         image_warped = bounds_warped.mirrored_image / 255
         sigma_warped = sigma_fraction * bounds_warped.radius
-        blurred_warped = gaussian_filter(
-            image_warped, (sigma_warped, sigma_warped, 0))
-        blurred = T.warp_inverse(blurred_warped, (self.h, self.w))
-        ce = unsharp_masking(self.image / 255, blurred,
-                             contrast_factor, sharpen)
-        
+        blurred_warped = gaussian_filter(image_warped, (sigma_warped, sigma_warped, 0))
+        blurred = T.warp_inverse(blurred_warped, self.hw)
+        ce = unsharp_masking(self.image / 255, blurred, contrast_factor, sharpen)
+
         mask = self.make_binary_mask(0.01)
         ce = to_uint8(ce)
         ce[~mask] = 0
@@ -100,16 +116,16 @@ class CFIBounds:
         d = int(np.round(shrink_ratio * self.radius))
 
         mask = r_squared_norm < 1
-        mask[:self.min_y+d] = False
-        mask[self.max_y-d:] = False
-        mask[:, :self.min_x+d] = False
-        mask[:, self.max_x-d:] = False
+        mask[: self.min_y + d] = False
+        mask[self.max_y - d :] = False
+        mask[:, : self.min_x + d] = False
+        mask[:, self.max_x - d :] = False
         return mask
 
     @lru_cache(maxsize=1)
     def get_coordinates(self, shrink_ratio=0.01):
-        dx = np.arange(self.w)[None, :] - self.cx
-        dy = np.arange(self.h)[:, None] - self.cy
+        dx = np.arange(self.hw[1])[None, :] - self.cx
+        dy = np.arange(self.hw[0])[:, None] - self.cy
 
         r = (1 - shrink_ratio) * self.radius
         dx_norm = dx / r
@@ -124,7 +140,7 @@ class CFIBounds:
         """
 
         cy, cx = self.cy, self.cx
-        h, w = self.h, self.w
+        h, w = self.hw
 
         mirrored_image = np.copy(self.image)
 
@@ -135,15 +151,14 @@ class CFIBounds:
         min_x = self.min_x + d
         max_x = self.max_x - d
         # below min_y mirrored to above min_y
-        mirrored_image[:min_y] = mirrored_image[2 * min_y - 1: min_y - 1: -1]
+        mirrored_image[:min_y] = mirrored_image[2 * min_y - 1 : min_y - 1 : -1]
         # above max_y mirrored to below max_y
-        mirrored_image[max_y:] = mirrored_image[max_y: 2 * max_y - h: -1]
+        mirrored_image[max_y:] = mirrored_image[max_y : 2 * max_y - h : -1]
 
         # left of min_x mirrored to right of min_x
-        mirrored_image[:, :min_x] = mirrored_image[:,
-                                                   2 * min_x - 1: min_x - 1: -1]
+        mirrored_image[:, :min_x] = mirrored_image[:, 2 * min_x - 1 : min_x - 1 : -1]
         # right of max_x mirrored to left of max_x
-        mirrored_image[:, max_x:] = mirrored_image[:, max_x: 2 * max_x - w: -1]
+        mirrored_image[:, max_x:] = mirrored_image[:, max_x : 2 * max_x - w : -1]
 
         dx, dy, r_squared_norm = self.get_coordinates(shrink_ratio)
 
@@ -177,16 +192,22 @@ class CFIBounds:
             patch_size = target_diameter
 
         scale = target_diameter / (2 * self.radius)
-        in_size = self.h, self.w
+        in_size = self.hw
         center = self.cy, self.cx
         return get_affine_transform(in_size, patch_size, scale=scale, center=center)
 
-    def warp(self, transform):
+    def warp(self, transform: ProjectiveTransform):
         cx_warped, cy_warped = transform.apply([[self.cx, self.cy]])[0]
         radius_warped = self.radius * transform.scale
-        image_warped = transform.warp(self.image)
+        image_warped = transform.warp(self.image) if self.image is not None else None
         lines_warped = {k: transform.apply(v) for k, v in self.lines.items()}
-        return CFIBounds(image_warped, cx_warped, cy_warped, radius_warped, lines_warped)
+        return CFIBounds(
+            (cx_warped, cy_warped),
+            radius_warped,
+            lines_warped,
+            hw=transform.out_size,
+            image=image_warped,
+        )
 
     def crop(self, target_diameter):
         T = self.get_cropping_transform(target_diameter)
@@ -207,40 +228,82 @@ class CFIBounds:
 
     def plot(self):
         plt.imshow(self.image)
-        plt.scatter(self.cx, self.cy, c='w', s=2)
-        plt.gca().add_artist(plt.Circle((self.cx, self.cy), self.radius, fill=False, color='w'))
-        for k in ['top', 'bottom', 'left', 'right']:
+        plt.scatter(self.cx, self.cy, c="w", s=2)
+        plt.gca().add_artist(
+            plt.Circle((self.cx, self.cy), self.radius, fill=False, color="w")
+        )
+        for k in ["top", "bottom", "left", "right"]:
             if k in self.lines:
                 p0, p1 = self.lines[k]
-                plt.plot([p0[0], p1[0]], [p0[1], p1[1]], c='w')
+                plt.plot([p0[0], p1[0]], [p0[1], p1[1]], c="w")
 
-        plt.xlim(0, self.w)
-        plt.ylim(self.h, 0)
+        plt.xlim(0, self.hw[1])
+        plt.ylim(self.hw[0], 0)
         plt.show()
-        
+
     def make_bounds_image(self, ax=None, fig=None):
         import cv2
+
         im = self.image.copy()
 
-        cv2.circle(im, (round(self.cx), round(self.cy)), radius=0, color=(255, 255, 255), thickness=-1)
-        cv2.circle(im, (round(self.cx), round(self.cy)), radius=round(self.radius), color=(255, 255, 255), thickness=2)
-        for k in ['top', 'bottom', 'left', 'right']:
+        cv2.circle(
+            im,
+            (round(self.cx), round(self.cy)),
+            radius=0,
+            color=(255, 255, 255),
+            thickness=-1,
+        )
+        cv2.circle(
+            im,
+            (round(self.cx), round(self.cy)),
+            radius=round(self.radius),
+            color=(255, 255, 255),
+            thickness=2,
+        )
+        for k in ["top", "bottom", "left", "right"]:
             if k in self.lines:
                 p0, p1 = self.lines[k]
-                cv2.line(im, (round(p0[0]), round(p0[1])), (round(p1[0]), round(p1[1])), (255,255,255), thickness=2)
+                cv2.line(
+                    im,
+                    (round(p0[0]), round(p0[1])),
+                    (round(p1[0]), round(p1[1])),
+                    (255, 255, 255),
+                    thickness=2,
+                )
 
         return im
 
     def to_dict(self):
         return {
-            'center': (self.cx, self.cy),
-            'radius': self.radius,
-            'lines': {k: (v.tolist() if isinstance(v, np.ndarray) else list(v)) for k, v in self.lines.items()},
+            "hw": self.hw,
+            "center": (self.cx, self.cy),
+            "radius": self.radius,
+            "lines": {
+                k: (v.tolist() if isinstance(v, np.ndarray) else list(v))
+                for k, v in self.lines.items()
+            },
+        }
+
+    def to_dict_all(self):
+        return {
+            "hw": self.hw,
+            "center": (self.cx, self.cy),
+            "radius": self.radius,
+            "lines": {
+                k: (v.tolist() if isinstance(v, np.ndarray) else list(v))
+                for k, v in self.lines.items()
+            },
+            "min_y": self.min_y,
+            "max_y": self.max_y,
+            "min_x": self.min_x,
+            "max_x": self.max_x,
         }
 
     @classmethod
     def from_dict(cls, image, d):
-        return CFIBounds(image, d['center'][0], d['center'][1], d['radius'], d['lines'])
+        return CFIBounds(
+            (d["center"][0], d["center"][1]), d["radius"], d["lines"], image=image
+        )
 
 
 def line_circle_intersection(P0, P1, C, r):
@@ -256,16 +319,15 @@ def line_circle_intersection(P0, P1, C, r):
     c = P0.dot(P0) + C.dot(C) - 2 * P0.dot(C) - r**2
 
     # Calculate the discriminant
-    discriminant = b**2 - 4*a*c
+    discriminant = b**2 - 4 * a * c
     if discriminant < 0:
         # The line and circle do not intersect
         return []
     else:
         # The line and circle intersect at one or two points
         sqrt_discriminant = np.sqrt(discriminant)
-        t = [(-b + sqrt_discriminant) / (2*a),
-             (-b - sqrt_discriminant) / (2*a)]
-        return [P0 + ti*d for ti in t]
+        t = [(-b + sqrt_discriminant) / (2 * a), (-b - sqrt_discriminant) / (2 * a)]
+        return [P0 + ti * d for ti in t]
 
 
 def unsharp_masking(image, blurred, contrast_factor=4, sharpen=False):
