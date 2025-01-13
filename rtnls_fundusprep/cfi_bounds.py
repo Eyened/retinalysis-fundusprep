@@ -25,9 +25,9 @@ class CFIBounds:
         self.radius = radius
         self.lines = lines
 
-        assert (
-            image is not None or hw is not None
-        ), "Either hw or image must be provided"
+        assert image is not None or hw is not None, (
+            "Either hw or image must be provided"
+        )
 
         self.hw = hw
         self.image = image
@@ -71,35 +71,39 @@ class CFIBounds:
 
     @cached_property
     def contrast_enhanced_2(self):
-        return self.make_contrast_enhanced_res256(0.02)
+        return self.make_contrast_enhanced_res256(sigma_fraction=0.02)
 
     @cached_property
     def contrast_enhanced_5(self):
-        return self.make_contrast_enhanced_res256(0.05)
+        return self.make_contrast_enhanced_res256(sigma_fraction=0.05)
 
     @cached_property
     def sharpened_5(self):
-        return self.make_contrast_enhanced_res256(0.05, contrast_factor=2, sharpen=True)
+        return self.make_contrast_enhanced_res256(
+            sigma_fraction=0.05, contrast_factor=2, sharpen=True
+        )
 
     @cached_property
     def contrast_enhanced_10(self):
-        return self.make_contrast_enhanced_res256(0.1)
+        return self.make_contrast_enhanced_res256(sigma_fraction=0.1)
 
     @cached_property
     def mirrored_image(self):
         return self.make_mirrored_image()
 
     def make_contrast_enhanced_res256(
-        self, sigma_fraction, contrast_factor=4, sharpen=False
+        self, image=None, sigma_fraction=0.05, contrast_factor=4, sharpen=False
     ):
+        image = self.image if image is None else image
+
         ce_resolution = 256
         T = self.get_cropping_transform(ce_resolution)
-        bounds_warped = self.warp(T)
+        bounds_warped = self.warp(T, image=image)
         image_warped = bounds_warped.mirrored_image / 255
         sigma_warped = sigma_fraction * bounds_warped.radius
         blurred_warped = gaussian_filter(image_warped, (sigma_warped, sigma_warped, 0))
         blurred = T.warp_inverse(blurred_warped, self.hw)
-        ce = unsharp_masking(self.image / 255, blurred, contrast_factor, sharpen)
+        ce = unsharp_masking(image / 255, blurred, contrast_factor, sharpen)
 
         mask = self.make_binary_mask(0.01)
         ce = to_uint8(ce)
@@ -196,10 +200,12 @@ class CFIBounds:
         center = self.cy, self.cx
         return get_affine_transform(in_size, patch_size, scale=scale, center=center)
 
-    def warp(self, transform: ProjectiveTransform):
+    def warp(self, transform: ProjectiveTransform, image=None):
+        if image is None:
+            image = self.image
         cx_warped, cy_warped = transform.apply([[self.cx, self.cy]])[0]
         radius_warped = self.radius * transform.scale
-        image_warped = transform.warp(self.image) if self.image is not None else None
+        image_warped = transform.warp(image) if image is not None else None
         lines_warped = {k: transform.apply(v) for k, v in self.lines.items()}
         return CFIBounds(
             (cx_warped, cy_warped),
