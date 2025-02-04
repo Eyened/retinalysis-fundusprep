@@ -18,6 +18,7 @@ setup(
         "tqdm == 4.*",
         "Pillow == 9.*",
         "click==8.*",
+        "pydicom==2.3.1",
     ],
     package_data={},
 )

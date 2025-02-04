@@ -90,10 +90,12 @@ def get_edge_points(image):
     return xs, ys
 
 
-def find_line(pts_x, pts_y):
+def find_line(pts_x, pts_y, random_state=42):
     # fit a line to the points using RANSAC
 
-    ransac = RANSACRegressor(residual_threshold=INLIER_DIST_THRESHOLD)
+    ransac = RANSACRegressor(
+        residual_threshold=INLIER_DIST_THRESHOLD, random_state=random_state
+    )
     ransac.fit(pts_x.reshape(-1, 1), pts_y)
     a, b = ransac.estimator_.coef_[0], ransac.estimator_.intercept_
 
@@ -107,17 +109,17 @@ def find_line(pts_x, pts_y):
     return pts, np.mean(inlier_mask)
 
 
-def find_lines(xs, ys):
+def find_lines(xs, ys, random_state=42):
     result = {}
     for location in ["left", "right"]:
         mask = rect_masks[location]
-        line, support = find_line(ys[mask], xs[mask])
+        line, support = find_line(ys[mask], xs[mask], random_state=random_state)
         if support > 0.5:
             p0, p1 = line
             result[location] = p0[::-1], p1[::-1]
     for location in ["top", "bottom"]:
         mask = rect_masks[location]
-        line, support = find_line(xs[mask], ys[mask])
+        line, support = find_line(xs[mask], ys[mask], random_state=random_state)
         if support > 0.5:
             result[location] = line
     return result
@@ -134,7 +136,7 @@ def inverse_tranform(bounds, init_transform):
     return result
 
 
-def get_mask(image):
+def get_mask(image, random_state=42):
     image_gray = get_gray_scale(image)
     T0, image_scaled = rescale(image_gray, resolution=RESOLUTION)
 
@@ -142,7 +144,12 @@ def get_mask(image):
 
     try:
         radius, center, inliers = find_circle(
-            xs, ys, MIN_R, MAX_R, inlier_dist_threshold=INLIER_DIST_THRESHOLD
+            xs,
+            ys,
+            MIN_R,
+            MAX_R,
+            inlier_dist_threshold=INLIER_DIST_THRESHOLD,
+            random_state=random_state,
         )
         circle_fraction = np.sum(inliers) / RESOLUTION
     except ValueError:
@@ -161,7 +168,7 @@ def get_mask(image):
             radius = 0.95 * radius
 
         # find rectangular bounds
-        result = find_lines(xs, ys)
+        result = find_lines(xs, ys, random_state=random_state)
 
     result["center"] = center
     result["radius"] = radius
