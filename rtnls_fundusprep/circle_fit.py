@@ -32,7 +32,13 @@ def abs_dist(pts, center, radius):
 
 
 def find_circle(
-    pts_x, pts_y, min_radius, max_radius, inlier_dist_threshold, min_fraction=0.2
+    pts_x,
+    pts_y,
+    min_radius,
+    max_radius,
+    inlier_dist_threshold,
+    min_fraction=0.2,
+    random_state=42,
 ):
     """
     Find a circle in a set of points using RANSAC.
@@ -48,7 +54,7 @@ def find_circle(
     n = len(pts)
     best_inliers = None
     n_best_inliers = 0
-    rng = np.random.default_rng(seed=42)
+    rng = np.random.default_rng(seed=random_state)
     for _ in range(NUM_ITERATIONS):
         attempts = 0
         while attempts < MAX_ATTEMPTS:
