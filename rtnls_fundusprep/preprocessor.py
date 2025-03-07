@@ -2,13 +2,13 @@ import os
 from pathlib import Path
 from typing import List
 
-import cv2
 import numpy as np
 from joblib import Parallel, delayed
 from PIL import Image
 from tqdm import tqdm
 
 from rtnls_fundusprep.mask_extraction import get_cfi_bounds
+from rtnls_fundusprep.transformation import Interpolation
 from rtnls_fundusprep.utils import open_image
 
 
@@ -23,9 +23,8 @@ class FundusPreprocessor:
         self.square_size = square_size
         self.contrast_enhance = contrast_enhance
         self.target_prep_fn = target_prep_fn
-        self.dilation_iterations = dilation_iterations
 
-    def __call__(self, image, mask=None, keypoint=None, **kwargs):
+    def __call__(self, image, mask=None, keypoints=None, **kwargs):
         # assert image.dtype == np.float32
 
         orig_bounds = get_cfi_bounds(image)
@@ -41,13 +40,15 @@ class FundusPreprocessor:
 
             if mask is not None:
                 # we dilate the mask to better preserve connectivity
-                if self.dilation_iterations > 0:
-                    mask = cv2.dilate(
-                        mask, np.ones((3, 3)), iterations=self.dilation_iterations
-                    )
-                mask = M.warp(mask, (diameter, diameter))
-            if keypoint is not None:
-                keypoint = tuple(M.apply([keypoint])[0])
+                mask = M.warp(mask, (diameter, diameter), mode=Interpolation.NEAREST)
+
+            if keypoints is not None and len(keypoints) > 0:
+                # print(keypoints)
+                # Convert list of tuples to numpy array for transformation
+                keypoints_array = np.array(keypoints)
+                transformed_keypoints = M.apply(keypoints_array)
+                # Convert back to list of tuples
+                keypoints = [tuple(point) for point in transformed_keypoints]
         else:
             bounds = orig_bounds
 
@@ -57,11 +58,11 @@ class FundusPreprocessor:
         else:
             ce = None
 
-        item = {"image": image, "bounds": orig_bounds, **kwargs}
+        item = {"image": image, "metadata": {"bounds": orig_bounds.to_dict()}, **kwargs}
         if mask is not None:
             item["mask"] = mask
-        if keypoint is not None:
-            item["keypoint"] = keypoint
+        if keypoints is not None:
+            item["keypoints"] = keypoints
         if ce is not None:
             item["ce"] = ce
 
