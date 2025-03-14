@@ -7,6 +7,11 @@ setup(
     author_email="your.email@example.com",
     description="A brief description of package1",
     packages=find_packages(),
+    entry_points={
+        "console_scripts": [
+            "fundusprep = rtnls_fundusprep.cli:cli",
+        ]
+    },
     install_requires=[
         "numpy == 1.*",
         "pandas == 2.*",

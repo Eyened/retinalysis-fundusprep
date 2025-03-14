@@ -18,15 +18,12 @@ class FundusPreprocessor:
         square_size=None,
         contrast_enhance=False,
         target_prep_fn=None,
-        dilation_iterations=0,
     ):
         self.square_size = square_size
         self.contrast_enhance = contrast_enhance
         self.target_prep_fn = target_prep_fn
 
     def __call__(self, image, mask=None, keypoints=None, **kwargs):
-        # assert image.dtype == np.float32
-
         orig_bounds = get_cfi_bounds(image)
 
         if self.target_prep_fn is not None:
@@ -93,7 +90,7 @@ def preprocess_one(img_path, rgb_path, ce_path, square_size):
         Image.fromarray((prep["image"]).astype(np.uint8)).save(rgb_path)
     if ce_path is not None:
         Image.fromarray((prep["ce"]).astype(np.uint8)).save(ce_path)
-    bounds = prep["bounds"].to_dict()
+    bounds = prep["metadata"]["bounds"]
 
     return True, bounds
 
