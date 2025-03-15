@@ -11,6 +11,48 @@ def cli():
     pass
 
 
+def _run_preprocessing(
+    files, ids=None, rgb_path=None, ce_path=None, bounds_path=None, n_jobs=4
+):
+    """Common preprocessing function used by CLI commands.
+
+    Args:
+        files: List of Path objects to process
+        ids: Optional list of IDs to use for the files
+        rgb_path: Output path for RGB images
+        ce_path: Output path for Contrast Enhanced images
+        bounds_path: Output path for CSV with image bounds data
+        n_jobs: Number of preprocessing workers
+    """
+    # Handle optional paths
+    rgb_output = Path(rgb_path) if rgb_path else None
+    ce_output = Path(ce_path) if ce_path else None
+
+    if not files:
+        click.echo("No valid files to process")
+        return
+
+    click.echo(f"Found {len(files)} files to process")
+
+    # Run preprocessing
+    bounds = parallel_preprocess(
+        files,
+        ids=ids,
+        rgb_path=rgb_output,
+        ce_path=ce_output,
+        n_jobs=n_jobs,
+    )
+
+    # Save bounds if a path was provided
+    if bounds_path:
+        df_bounds = pd.DataFrame(bounds).set_index("id")
+        bounds_output = Path(bounds_path)
+        df_bounds.to_csv(bounds_output)
+        click.echo(f"Saved bounds data to {bounds_output}")
+
+    click.echo("Preprocessing complete")
+
+
 @cli.command()
 @click.argument("data_path", type=click.Path(exists=True))
 @click.option("--rgb_path", type=click.Path(), help="Output path for RGB images")
@@ -28,34 +70,19 @@ def preprocess_folder(data_path, rgb_path, ce_path, bounds_path, n_jobs):
     """
     data_path = Path(data_path)
 
-    # Handle optional paths
-    rgb_output = Path(rgb_path) if rgb_path else None
-    ce_output = Path(ce_path) if ce_path else None
-
     # Get all files in the data directory
     files = list(data_path.glob("*"))
     if not files:
         click.echo(f"No files found in {data_path}")
         return
 
-    click.echo(f"Found {len(files)} files to process")
-
-    # Run preprocessing
-    bounds = parallel_preprocess(
-        files,
-        rgb_path=rgb_output,
-        ce_path=ce_output,
+    _run_preprocessing(
+        files=files,
+        rgb_path=rgb_path,
+        ce_path=ce_path,
+        bounds_path=bounds_path,
         n_jobs=n_jobs,
     )
-
-    # Save bounds if a path was provided
-    if bounds_path:
-        df_bounds = pd.DataFrame(bounds).set_index("id")
-        bounds_output = Path(bounds_path)
-        df_bounds.to_csv(bounds_output)
-        click.echo(f"Saved bounds data to {bounds_output}")
-
-    click.echo("Preprocessing complete")
 
 
 @cli.command()
@@ -76,10 +103,6 @@ def preprocess_csv(csv_path, rgb_path, ce_path, bounds_path, n_jobs):
     If an 'id' column exists in the CSV, those values will be used as image identifiers
     instead of automatically generating them from filenames.
     """
-    # Handle optional paths
-    rgb_output = Path(rgb_path) if rgb_path else None
-    ce_output = Path(ce_path) if ce_path else None
-
     # Read the CSV file
     try:
         df = pd.read_csv(csv_path)
@@ -102,8 +125,6 @@ def preprocess_csv(csv_path, rgb_path, ce_path, bounds_path, n_jobs):
         missing_count = len(files) - len(existing_files)
         click.echo(f"Warning: {missing_count} files from the CSV do not exist")
 
-    click.echo(f"Found {len(existing_files)} files to process")
-
     # Check if 'id' column exists and prepare ids list if it does
     ids = None
     if "id" in df.columns:
@@ -112,20 +133,11 @@ def preprocess_csv(csv_path, rgb_path, ce_path, bounds_path, n_jobs):
         ids = [path_to_id_map[str(f)] for f in existing_files]
         click.echo("Using IDs from 'id' column in CSV")
 
-    # Run preprocessing
-    bounds = parallel_preprocess(
-        existing_files,
-        ids=ids,  # Pass ids if available, otherwise None
-        rgb_path=rgb_output,
-        ce_path=ce_output,
+    _run_preprocessing(
+        files=existing_files,
+        ids=ids,
+        rgb_path=rgb_path,
+        ce_path=ce_path,
+        bounds_path=bounds_path,
         n_jobs=n_jobs,
     )
-
-    # Save bounds if a path was provided
-    if bounds_path:
-        df_bounds = pd.DataFrame(bounds).set_index("id")
-        bounds_output = Path(bounds_path)
-        df_bounds.to_csv(bounds_output)
-        click.echo(f"Saved bounds data to {bounds_output}")
-
-    click.echo("Preprocessing complete")
