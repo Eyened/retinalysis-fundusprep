@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rtnls_fundusprep"
+version = "0.1.0"
+description = "Easy, robust CFI bounds detection and contrast enhancement"
+authors = [{ name = "Bart Liefers", email = "your.email@example.com" }]
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.10, <3.11"
+dependencies = [
+    "numpy ~= 1.0",
+    "pandas ~= 2.0",
+    "scikit-learn ~= 1.0",
+    "scikit-image == 0.24.0",
+    "opencv-python ~= 4.0",
+    "matplotlib ~= 3.0",
+    "joblib ~= 1.0",
+    "tqdm ~= 4.0",
+    "Pillow ~= 9.0",
+    "click ~= 8.0",
+    "pydicom == 2.3.1",
+]
+
+[tool.setuptools]
+packages = ["rtnls_fundusprep"]
+
+[project.scripts]
+fundusprep = "rtnls_fundusprep.cli:cli"
+
+[project.urls]
+"Homepage" = "https://github.com/Eyened/retinalysis-fundusprep"
+"Bug Tracker" = "https://github.com/Eyened/retinalysis-fundusprep/issues"
+
+[tool.bumpver]
+current_version = "0.1.0"
+version_pattern = "MAJOR.MINOR.PATCH"
+commit_message = "Bump version {old_version} → {new_version}"
