@@ -1,9 +1,9 @@
-# Retinalysis fundus preprocessing
+# 👁️ Retinalysis fundus preprocessing
 
 Fundus / CFI bounds extraction, cropping and contrast enhancement
 
 
-## Installation
+## 📦 Installation
 
 ```python
 pip install retinalysis-fundusprep
@@ -11,26 +11,19 @@ pip install retinalysis-fundusprep
 
 ## Basic usage: running from the command line
 
-We include command line utilities for running fundus preprocessing. Two commands:
+We include a command line utility for running fundus preprocessing. The `prep` command handles both directory and CSV input formats:
 
-- `preprocess-folder` use for running on a folder with input RGB images. Will not recurse into children of the input folder:
+```bash
+fundusprep prep <input_path> [OPTIONS]
+```
 
-    ```bash
-    fundusprep preprocess-folder <data_path> [OPTIONS]
-    ```
+Where `<input_path>` can be either:
+- 📁 A directory containing fundus images to process
+- 📄 A CSV/TXT file with a 'path' column containing image file paths
 
-- `preprocess-csv` use for more advanced usage to provide arbitrary filepaths and specific filenames (or IDs) for the outputs. Provide an input CSV file with columns `path` (for filepath to an RGB file) and `id` (optional) to name/identify the outputs
+If a CSV file is provided and it contains an 'id' column, those values will be used as image identifiers instead of automatically generating them from filenames.
 
-    ```bash
-    fundusprep preprocess-csv ./image_list.csv \
-    --rgb_path ./processed_rgb \
-    --ce_path ./contrast_enhanced \
-    --bounds_path ./metadata/bounds.csv
-    ```
-
-### Options
-
-Both commands share the same options:
+### ⚙️ Options
 
 - `--rgb_path PATH`: Directory where processed RGB images will be saved
 - `--ce_path PATH`: Directory where contrast-enhanced images will be saved
@@ -38,7 +31,7 @@ Both commands share the same options:
 - `--n_jobs INTEGER`: Number of parallel processing workers (default: 4)
 
 
-### Notes
+### 📝 Notes
 
 - All output paths are optional - files will only be written when the corresponding path is provided
 - Missing image files will be reported but won't stop the processing of other images
@@ -46,14 +39,14 @@ Both commands share the same options:
 - All output images are saved in PNG format with the same filename as the input image.
 
 
-### Examples
+### 💡 Examples
 
 #### Processing Folder with RGB Images
 
 To process a folder of fundus images and save only the RGB versions along with the bounds information:
 
 ```bash
-fundusprep preprocess-folder ./original_images \
+fundusprep prep ./original_images \
   --rgb_path ./processed_rgb \
   --bounds_path ./metadata/bounds.csv
 ```
@@ -63,7 +56,7 @@ fundusprep preprocess-folder ./original_images \
 To process images with both RGB and contrast enhancement:
 
 ```bash
-fundusprep preprocess-folder ./original_images \
+fundusprep prep ./original_images \
   --rgb_path ./processed_rgb \
   --ce_path ./contrast_enhanced \
   --bounds_path ./metadata/bounds.csv
@@ -78,11 +71,12 @@ path
 /data/images/patient1.jpg
 /data/images/patient2.jpg
 /data/images/patient3.png
+```
 
 To process images listed in a CSV file:
 
 ```bash
-fundusprep preprocess-csv ./image_list.csv \
+fundusprep prep ./image_list.csv \
   --rgb_path ./processed_rgb \
   --ce_path ./contrast_enhanced \
   --bounds_path ./metadata/bounds.csv
@@ -106,7 +100,7 @@ path,id
 Processing is done in the same way:
 
 ```bash
-fundusprep preprocess-csv ./patient_images.csv \
+fundusprep prep ./patient_images.csv \
   --rgb_path ./processed_rgb \
   --ce_path ./contrast_enhanced \
   --bounds_path ./metadata/bounds.csv
