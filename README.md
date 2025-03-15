@@ -1,7 +1,13 @@
 # Retinalysis fundus preprocessing
 
-Fundus bounds extraction, cropping and contrast enhancement
+Fundus / CFI bounds extraction, cropping and contrast enhancement
 
+
+## Installation
+
+```python
+pip install retinalysis-fundusprep
+```
 
 ## Basic usage: running from the command line
 

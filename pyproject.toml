@@ -3,7 +3,7 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "rtnls_fundusprep"
+name = "retinalysis-fundusprep"
 version = "0.1.0"
 description = "Easy, robust CFI bounds detection and contrast enhancement"
 authors = [{ name = "Bart Liefers", email = "your.email@example.com" }]
