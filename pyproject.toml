@@ -1,10 +1,11 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=64", "setuptools-scm>=8", "wheel"]
 build-backend = "setuptools.build_meta"
+
 
 [project]
 name = "retinalysis-fundusprep"
-version = "0.2.0"
+dynamic = ["version"]
 description = "Easy, robust CFI bounds detection and contrast enhancement"
 authors = [{ name = "Bart Liefers", email = "your.email@example.com" }]
 readme = "README.md"
@@ -34,7 +35,5 @@ fundusprep = "rtnls_fundusprep.cli:cli"
 "Homepage" = "https://github.com/Eyened/retinalysis-fundusprep"
 "Bug Tracker" = "https://github.com/Eyened/retinalysis-fundusprep/issues"
 
-[tool.bumpver]
-current_version = "0.2.0"
-version_pattern = "MAJOR.MINOR.PATCH"
-commit_message = "Bump version {old_version} → {new_version}"
+[tool.setuptools_scm]
+# can be empty if no extra settings are needed, presence enables setuptools-scm
