@@ -16,54 +16,107 @@ class FundusPreprocessor:
     def __init__(
         self,
         square_size=None,
-        contrast_enhance=False,
-        target_prep_fn=None,
+        contrast_enhance=False
     ):
+        '''
+        params:
+            square_size: int, size of the square to crop the image to
+            contrast_enhance: bool or int, whether to apply contrast enhancement
+        '''
         self.square_size = square_size
         self.contrast_enhance = contrast_enhance
-        self.target_prep_fn = target_prep_fn
 
-    def __call__(self, image, mask=None, keypoints=None, **kwargs):
+    def __call__(self, image, masks=None, keypoints=None, **kwargs):
+        '''
+        params:
+            image: np.array (h, w, 3, dtype=np.uint8)
+            masks: np.array (h, w, dtype=np.uint8 or bool) or list of masks
+            keypoints: list of tuples (x, y)
+            
+        returns:
+            dict {
+                "image": original image (cropped to square if square_size is not None)
+                "metadata": dict {
+                    "bounds": dict {
+                        "center": np.array (np.float64 (2,))
+                        "radius": float
+                        "top"?: np.array (np.float64 (2,))
+                        "bottom"?: np.array (np.float64 (2,))
+                        "left"?: np.array (np.float64 (2,))
+                        "right"?: np.array (np.float64 (2,))
+                    }
+                }
+                "masks"?: mask cropped to square if square_size is not None
+                "keypoints"?: keypoints mapped to the new coordinates
+                "ce"?: contrast enhanced image if contrast_enhance is True or int
+            }
+        '''
+        # apply bounds extraction
         orig_bounds = get_cfi_bounds(image)
 
-        if self.target_prep_fn is not None:
-            mask = self.target_prep_fn(mask)
-            assert mask.dtype in [np.uint8, bool, float]
 
+        item = {
+            "image": image,
+            "metadata": {"bounds": orig_bounds.to_dict()},
+        
+            **kwargs
+        }
+        
         if self.square_size is not None:
-            diameter = self.square_size
-            M, bounds = orig_bounds.crop(diameter)
-            image = M.warp(image, (diameter, diameter))
-
-            if mask is not None:
-                # we dilate the mask to better preserve connectivity
-                mask = M.warp(mask, (diameter, diameter), mode=Interpolation.NEAREST)
-
-            if keypoints is not None and len(keypoints) > 0:
-                # print(keypoints)
-                # Convert list of tuples to numpy array for transformation
-                keypoints_array = np.array(keypoints)
-                transformed_keypoints = M.apply(keypoints_array)
-                # Convert back to list of tuples
-                keypoints = [tuple(point) for point in transformed_keypoints]
+            # resize the image to a square
+            M, bounds, image, masks, keypoints = self._apply_crop(
+                orig_bounds, image, masks, keypoints)
+            item["metadata"]["transform"] = M
         else:
             bounds = orig_bounds
+        item["bounds"] = bounds
 
-        if self.contrast_enhance:
-            mask = bounds.mask
-            ce = bounds.contrast_enhanced_5
-        else:
-            ce = None
-
-        item = {"image": image, "metadata": {"bounds": orig_bounds.to_dict()}, **kwargs}
-        if mask is not None:
-            item["mask"] = mask
+        
+        if masks is not None:
+            item["masks"] = masks
         if keypoints is not None:
             item["keypoints"] = keypoints
-        if ce is not None:
-            item["ce"] = ce
 
+        if self.contrast_enhance:
+            if type(self.contrast_enhance) == int:
+                sigma_fraction = self.contrast_enhance / 100
+                ce = bounds.make_contrast_enhanced_res256(
+                    sigma_fraction=sigma_fraction)
+            else:
+                # Use default sigma_fraction
+                ce = bounds.contrast_enhanced_5
+            item["ce"] = ce
         return item
+
+    def _apply_crop(self, orig_bounds, image, masks=None, keypoints=None):
+        diameter = self.square_size
+        # M is the transformation matrix to crop the image to a square
+        # bounds is the new bounds (cropped to a square)
+        M, bounds = orig_bounds.crop(diameter)
+        
+        # Crop the image to a square        
+        image = M.warp(image, (diameter, diameter))
+
+        if masks is not None:
+            # Check if we have a single mask or multiple masks
+            is_single_mask = isinstance(masks, np.ndarray) and masks.ndim == 2
+
+            masks_list = [masks] if is_single_mask else masks
+
+            # Crop the masks to the same square as the image
+            warped_masks = [
+                M.warp(mask, (diameter, diameter), mode=Interpolation.NEAREST)
+                for mask in masks_list
+            ]
+            masks = warped_masks[0] if is_single_mask else warped_masks
+
+        if keypoints is not None and len(keypoints) > 0:
+            # Convert list of tuples to numpy array for transformation
+            keypoints_array = np.array(keypoints)
+            transformed_keypoints = M.apply(keypoints_array)
+            # Convert back to list of tuples
+            keypoints = [tuple(point) for point in transformed_keypoints]
+        return M, bounds, image, masks, keypoints
 
 
 class FundusItemPreprocessor(FundusPreprocessor):

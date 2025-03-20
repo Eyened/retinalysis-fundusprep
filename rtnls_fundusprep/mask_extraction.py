@@ -67,6 +67,16 @@ def shortest_path(edge_image_horizontal):
 
 
 def get_edge_points(image):
+    '''
+    get edge points on the ROI (evenly distributed around the circle)
+    parameters:
+        - image: np.array (np.uint8 (RESOLUTION, RESOLUTION))
+
+    returns:
+        - xs: np.array (np.float64 (RESOLUTION,)) - x coordinates of the edge points
+        - ys: np.array (np.float64 (RESOLUTION,)) - y coordinates of the edge points
+    '''
+
     # convert to polar coordinates (with max radius MAX_R)
     polar_image = cv2.linearPolar(
         image, (CENTER, CENTER), MAX_R, cv2.WARP_FILL_OUTLIERS
@@ -113,19 +123,35 @@ def find_lines(xs, ys, random_state=42):
     result = {}
     for location in ["left", "right"]:
         mask = rect_masks[location]
-        line, support = find_line(ys[mask], xs[mask], random_state=random_state)
+        line, support = find_line(
+            ys[mask], xs[mask], random_state=random_state)
         if support > 0.5:
             p0, p1 = line
             result[location] = p0[::-1], p1[::-1]
     for location in ["top", "bottom"]:
         mask = rect_masks[location]
-        line, support = find_line(xs[mask], ys[mask], random_state=random_state)
+        line, support = find_line(
+            xs[mask], ys[mask], random_state=random_state)
         if support > 0.5:
             result[location] = line
     return result
 
 
 def inverse_tranform(bounds, init_transform):
+    '''
+    apply the inverse of init_transform to bounds
+    parameters:
+        - bounds: dict {
+            "center": np.array (np.float64 (2,))
+            "radius": float
+            "top"?: np.array (np.float64 (2,))
+            "bottom"?: np.array (np.float64 (2,))
+            "left"?: np.array (np.float64 (2,))
+            "right"?: np.array (np.float64 (2,))
+        }
+        - init_transform: ProjectiveTransform
+    '''
+    
     result = {}
     result["center"] = init_transform.apply_inverse([bounds["center"]])[0]
     result["radius"] = bounds["radius"] / init_transform.M[0, 0]
@@ -137,20 +163,33 @@ def inverse_tranform(bounds, init_transform):
 
 
 def get_mask(image, random_state=42):
+    '''
+    find circle and horizontal/vertical lines in the image
+    parameters:
+        - image: np.array (np.uint8 (h, w, 3))
+
+    returns:
+
+    '''
+    # uses the red channel, because it is the most contrasted
     image_gray = get_gray_scale(image)
+
+    # scale down for faster processing
     T0, image_scaled = rescale(image_gray, resolution=RESOLUTION)
 
+    # get edge points on the ROI (evenly distributed around the circle)
     xs, ys = get_edge_points(image_scaled)
 
     try:
+        # fit a circle to the edge points
+        
         radius, center, inliers = find_circle(
-            xs,
-            ys,
-            MIN_R,
-            MAX_R,
+            xs, ys,
+            MIN_R, MAX_R,
             inlier_dist_threshold=INLIER_DIST_THRESHOLD,
-            random_state=random_state,
+            random_state=random_state
         )
+        # fraction of points contributing to the circle fit
         circle_fraction = np.sum(inliers) / RESOLUTION
     except ValueError:
         circle_fraction = 0
@@ -161,9 +200,13 @@ def get_mask(image, random_state=42):
     else:
         if circle_fraction < 0.3:
             # not enough inliers for circle fit
+            # NOTE: this happens with particular images only
+            # Here we assume they're more or less rectangular, with smooth fading corners
+
             # fit circle through corners only
             pts = np.array([xs[corner_mask], ys[corner_mask]]).T
             radius, center = circle_fit(pts)
+            
             # compensate for soft edge
             radius = 0.95 * radius
 
@@ -173,10 +216,12 @@ def get_mask(image, random_state=42):
     result["center"] = center
     result["radius"] = radius
 
+    # undo the initial downscaling
     return inverse_tranform(result, T0)
 
 
 def get_cfi_bounds(image):
     mask = get_mask(image)
-    lines = {k: mask[k] for k in ["top", "bottom", "left", "right"] if k in mask}
+    lines = {k: mask[k]
+             for k in ["top", "bottom", "left", "right"] if k in mask}
     return CFIBounds(mask["center"], mask["radius"], lines, image=image)

@@ -137,16 +137,17 @@ class CFIBounds:
         r_squared_norm = dx_norm**2 + dy_norm**2
         return dx, dy, r_squared_norm
 
-    def make_mirrored_image(self, shrink_ratio=0.01):
+    def make_mirrored_image(self, image=None, shrink_ratio=0.01):
         """
         mirrors pixels around the box and circle defined by bounds
         Can be used in combination with contrast_enhance to avoid the bright boundary around the rim
         """
-
+        if image is None:
+            image = self.image
         cy, cx = self.cy, self.cx
         h, w = self.hw
 
-        mirrored_image = np.copy(self.image)
+        mirrored_image = np.copy(image)
 
         # shrink by d pixels
         d = int(np.round(shrink_ratio * self.radius))
