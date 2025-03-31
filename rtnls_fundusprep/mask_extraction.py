@@ -30,7 +30,7 @@ for mask in rect_masks.values():
 
 # some constants used for shortest path calculation
 n = RESOLUTION - MIN_R
-COST_DIST = 0.01 * np.subtract.outer(np.arange(n), np.arange(n)) ** 2
+COST_DIST = 0.02 * np.subtract.outer(np.arange(n), np.arange(n)) ** 2
 th = np.arange(RESOLUTION) * 2 * np.pi / RESOLUTION
 COST_TH = np.cos(th)
 SIN_TH = np.sin(th)
@@ -67,18 +67,38 @@ def shortest_path(edge_image_horizontal):
 
 
 def get_edge_points(image):
+    '''
+    get edge points on the ROI (evenly distributed around the circle)
+    parameters:
+        - image: np.array (np.uint8 (RESOLUTION, RESOLUTION))
+
+    returns:
+        - xs: np.array (np.float64 (RESOLUTION,)) - x coordinates of the edge points
+        - ys: np.array (np.float64 (RESOLUTION,)) - y coordinates of the edge points
+    '''
+
     # convert to polar coordinates (with max radius MAX_R)
     polar_image = cv2.linearPolar(
         image, (CENTER, CENTER), MAX_R, cv2.WARP_FILL_OUTLIERS
     )
     # crop (assuming radius > MIN_R)
     edge_region = polar_image[:, MIN_R:]
+    norm = edge_region / edge_region.max()
 
     # horizontal edge detection
-    gx = sobel(edge_region / edge_region.max(), 1)
+    gx = sobel(norm, 1)
 
+    gaussian = cv2.GaussianBlur(norm, (31, 31), 0)
+
+    # this should decrease the likelihood of a cut through edges inside the image (where gaussian is larger)
+    inp = gx * (1 - gaussian)
     # cut a line from top to bottom with least cost
-    p = shortest_path(gx)
+    p = shortest_path(inp)
+
+    # from matplotlib import pyplot as plt
+    # plt.imshow(inp, cmap="gray")
+    # plt.plot(p, range(RESOLUTION))
+    # plt.show()
 
     # convert back to cartesian coordinates
     radii = MIN_R + p
@@ -104,28 +124,45 @@ def find_line(pts_x, pts_y, random_state=42):
     xs = np.array([0, RESOLUTION])
     ys = a * xs + b
     pts = np.array([xs, ys]).T
-
+    valid = abs(a) < 0.02
+    # print(a, b, np.mean(inlier_mask))
     # return the line (p0, p1) and support fraction
-    return pts, np.mean(inlier_mask)
+    return pts, valid, np.mean(inlier_mask)
 
 
 def find_lines(xs, ys, random_state=42):
     result = {}
     for location in ["left", "right"]:
         mask = rect_masks[location]
-        line, support = find_line(ys[mask], xs[mask], random_state=random_state)
-        if support > 0.5:
+        line, valid, support = find_line(
+            ys[mask], xs[mask], random_state=random_state)
+        if valid and support > 0.5:
             p0, p1 = line
             result[location] = p0[::-1], p1[::-1]
     for location in ["top", "bottom"]:
         mask = rect_masks[location]
-        line, support = find_line(xs[mask], ys[mask], random_state=random_state)
-        if support > 0.5:
+        line, valid, support = find_line(
+            xs[mask], ys[mask], random_state=random_state)
+        if valid and support > 0.5:
             result[location] = line
     return result
 
 
 def inverse_tranform(bounds, init_transform):
+    '''
+    apply the inverse of init_transform to bounds
+    parameters:
+        - bounds: dict {
+            "center": np.array (np.float64 (2,))
+            "radius": float
+            "top"?: np.array (np.float64 (2,))
+            "bottom"?: np.array (np.float64 (2,))
+            "left"?: np.array (np.float64 (2,))
+            "right"?: np.array (np.float64 (2,))
+        }
+        - init_transform: ProjectiveTransform
+    '''
+
     result = {}
     result["center"] = init_transform.apply_inverse([bounds["center"]])[0]
     result["radius"] = bounds["radius"] / init_transform.M[0, 0]
@@ -137,20 +174,37 @@ def inverse_tranform(bounds, init_transform):
 
 
 def get_mask(image, random_state=42):
+    '''
+    find circle and horizontal/vertical lines in the image
+    parameters:
+        - image: np.array (np.uint8 (h, w, 3))
+
+    returns:
+
+    '''
+    # uses the red channel, because it is the most contrasted
     image_gray = get_gray_scale(image)
+
+    # scale down for faster processing
     T0, image_scaled = rescale(image_gray, resolution=RESOLUTION)
 
+    # get edge points on the ROI (evenly distributed around the circle)
     xs, ys = get_edge_points(image_scaled)
+    # from matplotlib import pyplot as plt
+    # plt.imshow(image_scaled, cmap="gray")
+    # plt.scatter(xs, ys, c="r", s=1)
+    # plt.show()
 
     try:
+        # fit a circle to the edge points
+
         radius, center, inliers = find_circle(
-            xs,
-            ys,
-            MIN_R,
-            MAX_R,
+            xs, ys,
+            MIN_R, MAX_R,
             inlier_dist_threshold=INLIER_DIST_THRESHOLD,
-            random_state=random_state,
+            random_state=random_state
         )
+        # fraction of points contributing to the circle fit
         circle_fraction = np.sum(inliers) / RESOLUTION
     except ValueError:
         circle_fraction = 0
@@ -161,9 +215,13 @@ def get_mask(image, random_state=42):
     else:
         if circle_fraction < 0.3:
             # not enough inliers for circle fit
+            # NOTE: this happens with particular images only
+            # Here we assume they're more or less rectangular, with smooth fading corners
+
             # fit circle through corners only
             pts = np.array([xs[corner_mask], ys[corner_mask]]).T
             radius, center = circle_fit(pts)
+
             # compensate for soft edge
             radius = 0.95 * radius
 
@@ -173,10 +231,12 @@ def get_mask(image, random_state=42):
     result["center"] = center
     result["radius"] = radius
 
+    # undo the initial downscaling
     return inverse_tranform(result, T0)
 
 
 def get_cfi_bounds(image):
     mask = get_mask(image)
-    lines = {k: mask[k] for k in ["top", "bottom", "left", "right"] if k in mask}
+    lines = {k: mask[k]
+             for k in ["top", "bottom", "left", "right"] if k in mask}
     return CFIBounds(mask["center"], mask["radius"], lines, image=image)
