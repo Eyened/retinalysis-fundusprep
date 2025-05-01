@@ -9,7 +9,7 @@ def open_image(filename):
     try:
         return np.array(Image.open(filename))
     except:
-        return pydicom.read_file(filename, force=True).pixel_array
+        return pydicom.dcmread(filename, force=True).pixel_array
 
 
 def get_gray_scale(array):
