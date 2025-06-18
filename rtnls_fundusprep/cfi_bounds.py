@@ -92,24 +92,27 @@ class CFIBounds:
         return self.make_mirrored_image()
 
     def make_contrast_enhanced_res256(
-        self, image=None, sigma_fraction=0.05, contrast_factor=4, sharpen=False
+        self, image=None, sigma_fraction=0.05, contrast_factor=4, sharpen=False, mirror=True, mask=True
     ):
         image = self.image if image is None else image
 
         ce_resolution = 256
         T = self.get_cropping_transform(ce_resolution)
         bounds_warped = self.warp(T, image=image)
-        image_warped = bounds_warped.mirrored_image / 255
+        image_warped = bounds_warped.mirrored_image / 255 if mirror else bounds_warped.image / 255
         sigma_warped = sigma_fraction * bounds_warped.radius
         blurred_warped = gaussian_filter(image_warped, (sigma_warped, sigma_warped, 0))
         blurred = T.warp_inverse(blurred_warped, self.hw)
+
         ce = unsharp_masking(image / 255, blurred, contrast_factor, sharpen)
 
-        mask = self.make_binary_mask(0.01)
-        ce = to_uint8(ce)
-        ce[~mask] = 0
+        if mask:
+            mask = self.make_binary_mask(0.01)
+            ce = to_uint8(ce)
+            ce[~mask] = 0
 
         return ce
+    
 
     def make_binary_mask(self, shrink_ratio=0.01):
         """
@@ -232,20 +235,25 @@ class CFIBounds:
         """
         return result.strip()
 
-    def plot(self):
-        plt.imshow(self.image)
-        plt.scatter(self.cx, self.cy, c="w", s=2)
-        plt.gca().add_artist(
+    def plot(self, ax=None):
+        if ax is None:
+            fig, ax = plt.subplots()
+        else:
+            fig = ax.get_figure()
+
+        ax.imshow(self.image)
+        ax.scatter(self.cx, self.cy, c="w", s=2)
+        ax.add_artist(
             plt.Circle((self.cx, self.cy), self.radius, fill=False, color="w")
         )
         for k in ["top", "bottom", "left", "right"]:
             if k in self.lines:
                 p0, p1 = self.lines[k]
-                plt.plot([p0[0], p1[0]], [p0[1], p1[1]], c="w")
+                ax.plot([p0[0], p1[0]], [p0[1], p1[1]], c="w")
 
-        plt.xlim(0, self.hw[1])
-        plt.ylim(self.hw[0], 0)
-        plt.show()
+        ax.set_xlim(0, self.hw[1])
+        ax.set_ylim(self.hw[0], 0)
+        return fig, ax
 
     def make_bounds_image(self, ax=None, fig=None):
         import cv2
