@@ -74,7 +74,7 @@ class FundusItemPreprocessor(FundusPreprocessor):
         return {**item, **prep_data}, bounds.to_dict()
 
 
-def preprocess_one(img_path, rgb_path, ce_path, square_size):
+def preprocess_one(id, img_path, rgb_path, ce_path, square_size):
     preprocessor = FundusPreprocessor(
         square_size=square_size, contrast_enhance=ce_path is not None
     )
@@ -83,7 +83,7 @@ def preprocess_one(img_path, rgb_path, ce_path, square_size):
         image = open_image(img_path)
         prep = preprocessor(image, None)
     except Exception:
-        print(f"Error with image {img_path}")
+        print(f"Error with image {img_path} with id {id}")
         return False, {}
 
     if rgb_path is not None:
@@ -123,7 +123,7 @@ def parallel_preprocess(
     else:
         rgb_paths = [None for f in files]
 
-    items = zip(files, rgb_paths, ce_paths)
+    items = zip(ids, files, rgb_paths, ce_paths)
 
     meta = Parallel(n_jobs=n_jobs, verbose=10)(
         delayed(preprocess_one)(*item, square_size=square_size) for item in tqdm(items)
