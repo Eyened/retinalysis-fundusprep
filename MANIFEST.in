@@ -1,0 +1,4 @@
+include README.md
+include development.md
+recursive-include samples/original *.png *.jpg *.jpeg *.dcm
+recursive-include tests/reference *.parquet

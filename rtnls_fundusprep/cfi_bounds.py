@@ -42,6 +42,8 @@ class CFIBounds:
         def intersects(location):
             if location not in lines:
                 return
+            if lines[location] is None:
+                return
             p0, p1 = lines[location]
             intersects = line_circle_intersection(p0, p1, center, radius)
             if len(intersects) == 2:

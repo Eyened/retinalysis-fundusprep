@@ -1,6 +1,9 @@
+from __future__ import annotations
+
+from enum import Enum
+
 import cv2
 import numpy as np
-from enum import Enum
 
 
 class Interpolation(Enum):
@@ -10,15 +13,16 @@ class Interpolation(Enum):
 
 
 def get_param_xy(param):
-    if hasattr(param, '__iter__') and len(param) == 2:
+    if hasattr(param, "__iter__") and len(param) == 2:
         return param
     else:
         return param, param
 
 
 class ProjectiveTransform:
-
-    def __init__(self, M, in_size, out_size):
+    def __init__(
+        self, M: np.ndarray, in_size: tuple[int, int], out_size: tuple[int, int]
+    ):
         self.in_size = get_param_xy(in_size)
         self.out_size = get_param_xy(out_size)
         self.M = M
@@ -29,7 +33,7 @@ class ProjectiveTransform:
         # self.M is a 3x3 matrix
         # return the scaling factor as a single scalar
         return np.sqrt(np.abs(np.linalg.det(self.M[:2, :2])))
-    
+
     def apply(self, points):
         # Add homogeneous coordinate (1) to each point
         points_homogeneous = np.column_stack([points, np.ones(len(points))])
@@ -56,8 +60,7 @@ class ProjectiveTransform:
     def _apply_warp(self, image, out_size, M, mode):
         dsize = self.get_dsize(image, out_size)
         image_in = image.astype(np.uint8) if image.dtype == bool else image
-        result = cv2.warpPerspective(
-            image_in, M, dsize=dsize, flags=mode.value)
+        result = cv2.warpPerspective(image_in, M, dsize=dsize, flags=mode.value)
         return result.astype(bool) if image.dtype == bool else result
 
     def warp(self, image, out_size=None, mode=Interpolation.BILINEAR):
@@ -93,7 +96,9 @@ class ProjectiveTransform:
         return ProjectiveTransform(np.array(d["M"]), d["in_size"], d["out_size"])
 
 
-def get_affine_transform(in_size, out_size, rotate=0, scale=1, center=None, flip=(False, False)):
+def get_affine_transform(
+    in_size, out_size, rotate=0, scale=1, center=None, flip=(False, False)
+):
     """
     Parameters:
     in_size: size of the input image (h, w)
