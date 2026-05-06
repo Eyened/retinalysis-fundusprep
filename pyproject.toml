@@ -20,7 +20,7 @@ dependencies = [
     "matplotlib >= 3.7, < 4",
     "joblib >= 1, < 2",
     "tqdm >= 4, < 5",
-    "Pillow >= 10, < 12",
+    "Pillow >= 10, < 13",
     "click >= 8, < 9",
     "pydicom >= 2.4, < 4",
 ]
