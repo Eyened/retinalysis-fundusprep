@@ -22,7 +22,7 @@ dependencies = [
     "tqdm >= 4, < 5",
     "Pillow >= 10, < 12",
     "click >= 8, < 9",
-    "pydicom >= 2.4, < 4",
+    "pydicom >= 2.4, < 4; sys_platform != 'emscripten'",
 ]
 
 [project.optional-dependencies]
