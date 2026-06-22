@@ -50,4 +50,5 @@ markers = [
 testpaths = ["tests"]
 
 [tool.setuptools_scm]
-# can be empty if no extra settings are needed, presence enables setuptools-scm
+version_scheme = "no-guess-dev"
+local_scheme = "no-local-version"
