@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import cv2
 import numpy as np
 from scipy.ndimage import sobel
@@ -118,6 +120,8 @@ def find_line(pts_x, pts_y, random_state=42):
     )
     ransac.fit(pts_x.reshape(-1, 1), pts_y)
     a, b = ransac.estimator_.coef_[0], ransac.estimator_.intercept_
+    if np.abs(a) > 0.1:  # too steep
+        return None, 0
 
     inlier_mask = ransac.inlier_mask_
 
