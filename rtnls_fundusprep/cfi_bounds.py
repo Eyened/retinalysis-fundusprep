@@ -8,7 +8,7 @@ from matplotlib import pyplot as plt
 from scipy.ndimage import gaussian_filter
 
 from rtnls_fundusprep.transformation import ProjectiveTransform, get_affine_transform
-from rtnls_fundusprep.utils import to_uint8
+from rtnls_fundusprep.utils import as_cv_color, spatial_gaussian_sigma, to_uint8
 
 
 class CFIBounds:
@@ -105,7 +105,9 @@ class CFIBounds:
         bounds_warped = self.warp(T, image=image)
         image_warped = bounds_warped.mirrored_image / 255 if mirror else bounds_warped.image / 255
         sigma_warped = sigma_fraction * bounds_warped.radius
-        blurred_warped = gaussian_filter(image_warped, (sigma_warped, sigma_warped, 0))
+        blurred_warped = gaussian_filter(
+            image_warped, spatial_gaussian_sigma(image_warped, sigma_warped)
+        )
         blurred = T.warp_inverse(blurred_warped, self.hw)
 
         ce = unsharp_masking(image / 255, blurred, contrast_factor, sharpen)
@@ -195,7 +197,7 @@ class CFIBounds:
         if sigma is None:
             sigma = 0.05 * self.radius
         image = self.mirrored_image / 255
-        blurred = gaussian_filter(image, sigma=(sigma, sigma, 0))
+        blurred = gaussian_filter(image, spatial_gaussian_sigma(image, sigma))
         ce = unsharp_masking(image, blurred, contrast_factor)
         return to_uint8(ce)
 
@@ -264,19 +266,20 @@ class CFIBounds:
         import cv2
 
         im = self.image.copy()
+        color = as_cv_color(im)
 
         cv2.circle(
             im,
             (round(self.cx), round(self.cy)),
             radius=0,
-            color=(255, 255, 255),
+            color=color,
             thickness=-1,
         )
         cv2.circle(
             im,
             (round(self.cx), round(self.cy)),
             radius=round(self.radius),
-            color=(255, 255, 255),
+            color=color,
             thickness=2,
         )
         for k in ["top", "bottom", "left", "right"]:
@@ -286,7 +289,7 @@ class CFIBounds:
                     im,
                     (round(p0[0]), round(p0[1])),
                     (round(p1[0]), round(p1[1])),
-                    (255, 255, 255),
+                    color,
                     thickness=2,
                 )
 

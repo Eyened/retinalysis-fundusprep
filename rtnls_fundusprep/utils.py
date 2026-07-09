@@ -27,12 +27,27 @@ def open_image(filename):
 
 def get_gray_scale(array):
     assert array.dtype == np.uint8, f"Expected uint8, got {array.dtype}"
-    if len(array.shape) == 3:
-        return array[:, :, 0]  # red channel
-    elif len(array.shape) == 2:
+    if array.ndim == 2:
         return array
-    else:
-        raise ValueError("Unknown image format")
+    if array.ndim == 3:
+        return array[:, :, 0]  # red channel; works for RGB and RGBA
+    raise ValueError(f"Expected 2D or 3D image, got shape {array.shape}")
+
+
+def spatial_gaussian_sigma(image: np.ndarray, sigma: float) -> tuple[float, ...]:
+    """Sigma tuple for scipy.ndimage.gaussian_filter on spatial axes only."""
+    if image.ndim < 2:
+        raise ValueError(f"Expected at least 2D image, got ndim={image.ndim}")
+    if image.ndim == 2:
+        return (sigma, sigma)
+    return (sigma, sigma, *([0] * (image.ndim - 2)))
+
+
+def as_cv_color(image: np.ndarray, value: int = 255) -> int | tuple[int, ...]:
+    """OpenCV color value matching image channel count."""
+    if image.ndim == 2:
+        return value
+    return tuple([value] * image.shape[2])
 
 
 def rescale(image, resolution=1024):

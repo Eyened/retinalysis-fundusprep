@@ -46,6 +46,8 @@ fundusprep = "rtnls_fundusprep.cli:cli"
 [tool.pytest.ini_options]
 markers = [
     "reference: regression tests for stored CFI bounds outputs",
+    "full_frame: images whose mask should use full-frame bounds",
+    "not_full_frame: images that should not be classified as full-frame",
 ]
 testpaths = ["tests"]
 
