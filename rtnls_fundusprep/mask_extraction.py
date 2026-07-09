@@ -213,11 +213,7 @@ def is_full_frame(img: np.ndarray) -> bool:
     center_med = np.median(center)
     corner_ratio = np.median(corners) / (center_med + 1e-6)
     edge_ratio = np.median(edge) / (center_med + 1e-6)
-    print(corner_dark, corner_ratio, edge_ratio)
-    print(
-        "full frame", corner_dark < 0.95 or (corner_ratio > 0.145 and edge_ratio > 0.10)
-    )
-
+    
     return corner_dark < 0.95 or (corner_ratio > 0.145 and edge_ratio > 0.10)
 
 
