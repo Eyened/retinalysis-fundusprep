@@ -27,28 +27,6 @@ def full_frame_center_and_radius(h: int, w: int) -> tuple[tuple[float, float], f
     return (cx, cy), radius
 
 
-def covers_full_frame(
-    min_y: int,
-    max_y: int,
-    min_x: int,
-    max_x: int,
-    cx: float,
-    cy: float,
-    radius: float,
-    h: int,
-    w: int,
-) -> bool:
-    margin = full_frame_margin(h, w)
-    if min_y > margin or max_y < h - margin:
-        return False
-    if min_x > margin or max_x < w - margin:
-        return False
-    for x, y in ((0, 0), (w, 0), (0, h), (w, h)):
-        if np.hypot(x - cx, y - cy) > radius + margin:
-            return False
-    return True
-
-
 def _rect_mirror_valid(min_y: int, max_y: int, min_x: int, max_x: int, h: int, w: int) -> bool:
     if not (0 <= min_y < max_y <= h and 0 <= min_x < max_x <= w):
         return False
@@ -77,29 +55,6 @@ def validate_crop_bounds(
             f"invalid crop bounds ({min_y}, {max_y}) x ({min_x}, {max_x}) "
             f"for image {h}x{w}"
         )
-
-
-def resolve_shrink_ratio(
-    min_y: int,
-    max_y: int,
-    min_x: int,
-    max_x: int,
-    h: int,
-    w: int,
-    shrink_ratio: float,
-    radius: float,
-) -> float:
-    if shrink_ratio <= 0:
-        return 0.0
-    d = shrink_pixels(shrink_ratio, radius)
-    if _rect_mirror_valid(min_y + d, max_y - d, min_x + d, max_x - d, h, w):
-        return shrink_ratio
-    warnings.warn(
-        f"shrink_ratio={shrink_ratio} is too large for crop bounds; using no shrink",
-        UserWarning,
-        stacklevel=3,
-    )
-    return 0.0
 
 
 def _apply_rect_mirror(
@@ -204,25 +159,31 @@ class CFIBounds:
 
     def _covers_full_frame(self) -> bool:
         h, w = self.hw
-        return covers_full_frame(
-            self.min_y,
-            self.max_y,
-            self.min_x,
-            self.max_x,
-            self.cx,
-            self.cy,
-            self.radius,
-            h,
-            w,
-        )
+        margin = full_frame_margin(h, w)
+        if self.min_y > margin or self.max_y < h - margin:
+            return False
+        if self.min_x > margin or self.max_x < w - margin:
+            return False
+        for x, y in ((0, 0), (w, 0), (0, h), (w, h)):
+            if np.hypot(x - self.cx, y - self.cy) > self.radius + margin:
+                return False
+        return True
 
     def _effective_shrink_ratio(self, shrink_ratio: float) -> float:
-        if self._covers_full_frame():
+        if self._covers_full_frame() or shrink_ratio <= 0:
             return 0.0
         h, w = self.hw
-        return resolve_shrink_ratio(
-            self.min_y, self.max_y, self.min_x, self.max_x, h, w, shrink_ratio, self.radius
+        d = shrink_pixels(shrink_ratio, self.radius)
+        if _rect_mirror_valid(
+            self.min_y + d, self.max_y - d, self.min_x + d, self.max_x - d, h, w
+        ):
+            return shrink_ratio
+        warnings.warn(
+            f"shrink_ratio={shrink_ratio} is too large for crop bounds; using no shrink",
+            UserWarning,
+            stacklevel=2,
         )
+        return 0.0
 
     @cached_property
     def mask(self):
