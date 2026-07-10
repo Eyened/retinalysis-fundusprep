@@ -26,9 +26,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+dicom = [
+    "pydicom >= 2.4, < 4",
+    "pylibjpeg >= 2.0",
+    "pylibjpeg-libjpeg >= 2.1",
+]
 test = [
     "pytest >= 8",
     "pyarrow >= 14",
+    "pylibjpeg >= 2.0",
+    "pylibjpeg-libjpeg >= 2.1",
 ]
 
 [tool.setuptools]
