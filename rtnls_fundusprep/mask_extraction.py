@@ -5,7 +5,7 @@ import numpy as np
 from scipy.ndimage import sobel
 from sklearn.linear_model import RANSACRegressor
 
-from rtnls_fundusprep.cfi_bounds import CFIBounds
+from rtnls_fundusprep.cfi_bounds import CFIBounds, full_frame_center_and_radius
 from rtnls_fundusprep.circle_fit import circle_fit, find_circle
 from rtnls_fundusprep.utils import get_gray_scale, rescale
 
@@ -219,15 +219,9 @@ def is_full_frame(img: np.ndarray) -> bool:
 
 def _full_frame_bounds(image_gray: np.ndarray) -> dict[str, np.ndarray | float]:
     h, w = image_gray.shape
-    center = np.array([w / 2, h / 2], dtype=np.float64)
-    radius = np.hypot(*center)
-    lines = {
-        "top": np.array([0, h]),
-        "bottom": np.array([0, h]),
-        "left": np.array([0, w]),
-        "right": np.array([0, w]),
-    }
-    return {"center": center, "radius": radius, "lines": lines}
+    (cx, cy), radius = full_frame_center_and_radius(h, w)
+    center = np.array([cx, cy], dtype=np.float64)
+    return {"center": center, "radius": radius}
 
 
 def get_mask(image, random_state=42):
@@ -294,6 +288,9 @@ def get_mask(image, random_state=42):
 
 
 def get_cfi_bounds(image):
-    mask = get_mask(image)
-    lines = {k: mask[k] for k in ["top", "bottom", "left", "right"] if k in mask}
-    return CFIBounds(mask["center"], mask["radius"], lines, image=image)
+    try:
+        mask = get_mask(image)
+        lines = {k: mask[k] for k in ["top", "bottom", "left", "right"] if k in mask}
+        return CFIBounds(mask["center"], mask["radius"], lines, image=image)
+    except Exception:
+        return CFIBounds.full_frame(image)

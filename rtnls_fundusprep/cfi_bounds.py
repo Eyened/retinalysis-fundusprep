@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from functools import cached_property, lru_cache
 from typing import Tuple
 
@@ -11,17 +12,138 @@ from rtnls_fundusprep.transformation import ProjectiveTransform, get_affine_tran
 from rtnls_fundusprep.utils import as_cv_color, spatial_gaussian_sigma, to_uint8
 
 
+def shrink_pixels(shrink_ratio: float, radius: float) -> int:
+    return int(np.round(shrink_ratio * radius))
+
+
+def full_frame_margin(h: int, w: int) -> float:
+    return max(1.0, 0.001 * max(h, w))
+
+
+def full_frame_center_and_radius(h: int, w: int) -> tuple[tuple[float, float], float]:
+    margin = full_frame_margin(h, w)
+    cx, cy = w / 2, h / 2
+    radius = float(np.hypot(cx, cy) + margin)
+    return (cx, cy), radius
+
+
+def covers_full_frame(
+    min_y: int,
+    max_y: int,
+    min_x: int,
+    max_x: int,
+    cx: float,
+    cy: float,
+    radius: float,
+    h: int,
+    w: int,
+) -> bool:
+    margin = full_frame_margin(h, w)
+    if min_y > margin or max_y < h - margin:
+        return False
+    if min_x > margin or max_x < w - margin:
+        return False
+    for x, y in ((0, 0), (w, 0), (0, h), (w, h)):
+        if np.hypot(x - cx, y - cy) > radius + margin:
+            return False
+    return True
+
+
+def _rect_mirror_valid(min_y: int, max_y: int, min_x: int, max_x: int, h: int, w: int) -> bool:
+    if not (0 <= min_y < max_y <= h and 0 <= min_x < max_x <= w):
+        return False
+    half_h, half_w = h // 2, w // 2
+    return (
+        min_y <= half_h
+        and max_y >= half_h
+        and min_x <= half_w
+        and max_x >= half_w
+    )
+
+
+def validate_crop_bounds(
+    min_y: int,
+    max_y: int,
+    min_x: int,
+    max_x: int,
+    h: int,
+    w: int,
+    radius: float,
+) -> None:
+    if radius <= 0:
+        raise ValueError("radius must be positive")
+    if not _rect_mirror_valid(min_y, max_y, min_x, max_x, h, w):
+        raise ValueError(
+            f"invalid crop bounds ({min_y}, {max_y}) x ({min_x}, {max_x}) "
+            f"for image {h}x{w}"
+        )
+
+
+def resolve_shrink_ratio(
+    min_y: int,
+    max_y: int,
+    min_x: int,
+    max_x: int,
+    h: int,
+    w: int,
+    shrink_ratio: float,
+    radius: float,
+) -> float:
+    if shrink_ratio <= 0:
+        return 0.0
+    d = shrink_pixels(shrink_ratio, radius)
+    if _rect_mirror_valid(min_y + d, max_y - d, min_x + d, max_x - d, h, w):
+        return shrink_ratio
+    warnings.warn(
+        f"shrink_ratio={shrink_ratio} is too large for crop bounds; using no shrink",
+        UserWarning,
+        stacklevel=3,
+    )
+    return 0.0
+
+
+def _apply_rect_mirror(
+    image: np.ndarray, min_y: int, max_y: int, min_x: int, max_x: int
+) -> None:
+    h, w = image.shape[:2]
+    if min_y > 0:
+        image[:min_y] = image[2 * min_y - 1 : min_y - 1 : -1]
+    if max_y < h:
+        image[max_y:] = image[max_y : 2 * max_y - h : -1]
+    if min_x > 0:
+        image[:, :min_x] = image[:, 2 * min_x - 1 : min_x - 1 : -1]
+    if max_x < w:
+        image[:, max_x:] = image[:, max_x : 2 * max_x - w : -1]
+
+
+def _apply_circle_mirror(
+    image: np.ndarray,
+    cx: float,
+    cy: float,
+    dx: np.ndarray,
+    dy: np.ndarray,
+    r_squared_norm: np.ndarray,
+) -> None:
+    h, w = image.shape[:2]
+    mask_outside = r_squared_norm > 1
+    y0, x0 = np.where(mask_outside)
+    scale = 1 / r_squared_norm[mask_outside]
+    x1 = np.clip(np.round(cx + dx[0, x0] * scale).astype(int), 0, w - 1)
+    y1 = np.clip(np.round(cy + dy[y0, 0] * scale).astype(int), 0, h - 1)
+    image[y0, x0] = image[y1, x1]
+
+
 class CFIBounds:
     def __init__(
         self,
         center: Tuple[float],
         radius: float,
-        lines={},
+        lines=None,
         hw: Tuple[float] = None,
         image: np.array = None,
         **kwargs,
     ):
-        center = center
+        lines = {} if lines is None else lines
         self.cy = center[1]
         self.cx = center[0]
         self.radius = radius
@@ -68,6 +190,39 @@ class CFIBounds:
         if line_right:
             ((x0, _), (x1, _)) = line_right
             self.max_x = min(self.max_x, int(np.floor(min(x0, x1))))
+
+        h, w = self.hw
+        validate_crop_bounds(
+            self.min_y, self.max_y, self.min_x, self.max_x, h, w, self.radius
+        )
+
+    @classmethod
+    def full_frame(cls, image: np.ndarray) -> CFIBounds:
+        h, w = image.shape[:2]
+        (cx, cy), radius = full_frame_center_and_radius(h, w)
+        return cls((cx, cy), radius, {}, image=image)
+
+    def _covers_full_frame(self) -> bool:
+        h, w = self.hw
+        return covers_full_frame(
+            self.min_y,
+            self.max_y,
+            self.min_x,
+            self.max_x,
+            self.cx,
+            self.cy,
+            self.radius,
+            h,
+            w,
+        )
+
+    def _effective_shrink_ratio(self, shrink_ratio: float) -> float:
+        if self._covers_full_frame():
+            return 0.0
+        h, w = self.hw
+        return resolve_shrink_ratio(
+            self.min_y, self.max_y, self.min_x, self.max_x, h, w, shrink_ratio, self.radius
+        )
 
     @cached_property
     def mask(self):
@@ -124,9 +279,10 @@ class CFIBounds:
         """
         creates a binary image of the bounds (circle and rectangle)
         """
+        h, w = self.hw
+        shrink_ratio = self._effective_shrink_ratio(shrink_ratio)
         _, _, r_squared_norm = self.get_coordinates(shrink_ratio)
-
-        d = int(np.round(shrink_ratio * self.radius))
+        d = shrink_pixels(shrink_ratio, self.radius)
 
         mask = r_squared_norm < 1
         mask[: self.min_y + d] = False
@@ -153,44 +309,19 @@ class CFIBounds:
         """
         if image is None:
             image = self.image
-        cy, cx = self.cy, self.cx
-        h, w = self.hw
 
         mirrored_image = np.copy(image)
-
-        # shrink by d pixels
-        d = int(np.round(shrink_ratio * self.radius))
-        min_y = self.min_y + d
-        max_y = self.max_y - d
-        min_x = self.min_x + d
-        max_x = self.max_x - d
-        # below min_y mirrored to above min_y
-        mirrored_image[:min_y] = mirrored_image[2 * min_y - 1 : min_y - 1 : -1]
-        # above max_y mirrored to below max_y
-        mirrored_image[max_y:] = mirrored_image[max_y : 2 * max_y - h : -1]
-
-        # left of min_x mirrored to right of min_x
-        mirrored_image[:, :min_x] = mirrored_image[:, 2 * min_x - 1 : min_x - 1 : -1]
-        # right of max_x mirrored to left of max_x
-        mirrored_image[:, max_x:] = mirrored_image[:, max_x : 2 * max_x - w : -1]
-
+        shrink_ratio = self._effective_shrink_ratio(shrink_ratio)
+        d = shrink_pixels(shrink_ratio, self.radius)
+        _apply_rect_mirror(
+            mirrored_image,
+            self.min_y + d,
+            self.max_y - d,
+            self.min_x + d,
+            self.max_x - d,
+        )
         dx, dy, r_squared_norm = self.get_coordinates(shrink_ratio)
-
-        # pixels outside the circle
-        mask_outside = r_squared_norm > 1
-        y0, x0 = np.where(mask_outside)
-
-        # scale factor to be applied to reflect coordinates in circle outline
-        scale = 1 / r_squared_norm[mask_outside]
-
-        x1 = np.round(cx + dx[0, x0] * scale).astype(int)
-        y1 = np.round(cy + dy[y0, 0] * scale).astype(int)
-        x1 = np.clip(x1, 0, w - 1)
-        y1 = np.clip(y1, 0, h - 1)
-
-        # assing pixel values outside the circle
-        mirrored_image[y0, x0] = mirrored_image[y1, x1]
-
+        _apply_circle_mirror(mirrored_image, self.cx, self.cy, dx, dy, r_squared_norm)
         return mirrored_image
 
     def contrast_enhance(self, sigma=None, contrast_factor=4):
@@ -335,12 +466,13 @@ def line_circle_intersection(P0, P1, C, r):
     # Define the line as a vector equation
     d = P1 - P0
 
-    # Coefficients for the quadratic equation
     a = d.dot(d)
+    if a == 0:
+        return []
+
     b = 2 * d.dot(P0 - C)
     c = P0.dot(P0) + C.dot(C) - 2 * P0.dot(C) - r**2
 
-    # Calculate the discriminant
     discriminant = b**2 - 4 * a * c
     if discriminant < 0:
         # The line and circle do not intersect
